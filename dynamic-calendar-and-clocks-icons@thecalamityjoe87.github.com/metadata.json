@@ -5,6 +5,6 @@
     "description":
     "Let Calendar, Clocks and Weather icons show current date, time and weather.",
     "version": 11,
-    "shell-version": ["46", "47", "48","49"],
+    "shell-version": ["46", "47", "48", "49"],
     "url": "https://github.com/thecalamityjoe87/dynamic-calendar-and-clocks-icons"
 }
