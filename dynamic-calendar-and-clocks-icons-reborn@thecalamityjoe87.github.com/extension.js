@@ -127,26 +127,6 @@ function loadSurface(file) {
     return Cairo.ImageSurface.createFromPNG(path + file);
 }
 
-let originalInit;
-
-function initProviderInfo(provider) {
-    originalInit.call(this, provider);
-    let providerId = provider.appInfo.get_id();
-    let icon = null;
-    let iconSize = this.PROVIDER_ICON_SIZE;
-    if(enableCalendar && providerId == CALENDAR_FILE) {
-        icon = newIcon(iconSize, 'calendar', repaintCalendar); 
-    } else if(enableClocks && providerId == CLOCKS_FILE) {
-        icon = newIcon(iconSize, 'clocks', repaintClocks);
-    } else if(enableWeather && providerId == WEATHER_FILE) {
-        icon = newWeatherIcon(iconSize);
-    }
-    if(icon != null) {
-        let oldIcon = this._content.get_child_at_index(0);
-        this._content.replace_child(oldIcon, icon);
-    }
-}
-
 let originalCreate;
 
 function createIconTexture(iconSize) {
