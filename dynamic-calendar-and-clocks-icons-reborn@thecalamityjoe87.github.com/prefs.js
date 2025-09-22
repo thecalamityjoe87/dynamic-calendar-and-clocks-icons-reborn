@@ -57,7 +57,7 @@ export default class DynamicIconsPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         Me = this;
         const settings = Me.getSettings
-        ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons');
+        ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
         const page = new Adw.PreferencesPage();
         window.add(page);
         const themeGroup = new Adw.PreferencesGroup();

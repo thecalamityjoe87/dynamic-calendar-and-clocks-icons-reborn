@@ -31,7 +31,7 @@ let enableWeather, showBackground, showTemperature;
 
 function loadSettings() {
     settings = Me.getSettings
-    ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons');
+    ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
     loadTheme();
     enableCalendar = settings.get_boolean('calendar');
     showWeekday = settings.get_boolean('show-weekday');
