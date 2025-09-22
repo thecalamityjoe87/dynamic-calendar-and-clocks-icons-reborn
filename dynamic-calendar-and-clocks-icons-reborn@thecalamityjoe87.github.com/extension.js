@@ -600,15 +600,12 @@ export default class DynamicIconsExtension extends Extension {
         Me = this;
         createWeatherClient();
         loadSettings();
-        //originalInit = Search.ProviderInfo.prototype._init;
         originalCreate = Shell.App.prototype.create_icon_texture;
-        //Search.ProviderInfo.prototype._init = initProviderInfo;
         Shell.App.prototype.create_icon_texture = createIconTexture;
         redisplayIcons();
     }
 
     disable() {
-        //Search.ProviderInfo.prototype._init = originalInit;
         Shell.App.prototype.create_icon_texture = originalCreate;
         redisplayIcons();
         destroyObjects();
