@@ -57,7 +57,7 @@ export default class DynamicIconsPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         Me = this;
         const settings = Me.getSettings
-        ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons');
+        ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
         const page = new Adw.PreferencesPage();
         window.add(page);
         const themeGroup = new Adw.PreferencesGroup();
@@ -68,7 +68,7 @@ export default class DynamicIconsPreferences extends ExtensionPreferences {
         });
         page.add(calendarGroup);
         newRow(settings, calendarGroup, _('Dynamic Calendar Icon'), 'calendar');
-        newRow(settings, calendarGroup, _('Show Week Day'), 'show-weekday');
+        newRow(settings, calendarGroup, _('Show Day of the Week'), 'show-weekday');
         newRow(settings, calendarGroup, _('Show Month'), 'show-month');
         const clocksGroup = new Adw.PreferencesGroup({
             title: _('Clocks'),

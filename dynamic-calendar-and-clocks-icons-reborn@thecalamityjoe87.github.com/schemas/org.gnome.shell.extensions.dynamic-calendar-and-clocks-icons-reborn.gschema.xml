@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-  <schema id="org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons"
-  path="/org/gnome/shell/extensions/dynamic-calendar-and-clocks-icons/">
+  <schema id="org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn"
+  path="/org/gnome/shell/extensions/dynamic-calendar-and-clocks-icons-reborn/">
     <key name="theme" type="s">
       <default>''</default>
     </key>

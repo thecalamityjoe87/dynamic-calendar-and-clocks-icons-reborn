@@ -31,7 +31,7 @@ let enableWeather, showBackground, showTemperature;
 
 function loadSettings() {
     settings = Me.getSettings
-    ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons');
+    ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
     loadTheme();
     enableCalendar = settings.get_boolean('calendar');
     showWeekday = settings.get_boolean('show-weekday');
@@ -125,26 +125,6 @@ function loadSurfaces() {
 
 function loadSurface(file) {
     return Cairo.ImageSurface.createFromPNG(path + file);
-}
-
-let originalInit;
-
-function initProviderInfo(provider) {
-    originalInit.call(this, provider);
-    let providerId = provider.appInfo.get_id();
-    let icon = null;
-    let iconSize = this.PROVIDER_ICON_SIZE;
-    if(enableCalendar && providerId == CALENDAR_FILE) {
-        icon = newIcon(iconSize, 'calendar', repaintCalendar); 
-    } else if(enableClocks && providerId == CLOCKS_FILE) {
-        icon = newIcon(iconSize, 'clocks', repaintClocks);
-    } else if(enableWeather && providerId == WEATHER_FILE) {
-        icon = newWeatherIcon(iconSize);
-    }
-    if(icon != null) {
-        let oldIcon = this._content.get_child_at_index(0);
-        this._content.replace_child(oldIcon, icon);
-    }
 }
 
 let originalCreate;
@@ -600,15 +580,12 @@ export default class DynamicIconsExtension extends Extension {
         Me = this;
         createWeatherClient();
         loadSettings();
-        //originalInit = Search.ProviderInfo.prototype._init;
         originalCreate = Shell.App.prototype.create_icon_texture;
-        //Search.ProviderInfo.prototype._init = initProviderInfo;
         Shell.App.prototype.create_icon_texture = createIconTexture;
         redisplayIcons();
     }
 
     disable() {
-        //Search.ProviderInfo.prototype._init = originalInit;
         Shell.App.prototype.create_icon_texture = originalCreate;
         redisplayIcons();
         destroyObjects();

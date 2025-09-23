@@ -1,0 +1,11 @@
+{
+    "uuid": "dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com",
+    "gettext-domain": "dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com",
+    "name": "Dynamic Calendar, Clocks and Weather Icons [Reborn]",
+    "description":
+    "Let Calendar, Clocks and Weather icons show current date, time and weather. This is a fork of the original Dynamic Calendar, Clocks and Weather Icons extension.",
+    "version": 1,
+    "shell-version": ["46", "47", "48", "49"],
+    "url": "https://github.com/thecalamityjoe87/dynamic-calendar-and-clocks-icons-reborn",
+    "settings-schema": "org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn"
+}
