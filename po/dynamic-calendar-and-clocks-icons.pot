@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-09-07 22:17+0300\n"
+"POT-Creation-Date: 2025-09-23 02:35+0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,54 +17,54 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:37
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:37
 msgid "Follow System"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:39
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:39
 msgid "Theme"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:67
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:67
 msgid "Calendar"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:70
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:70
 msgid "Dynamic Calendar Icon"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:71
-msgid "Show Week Day"
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:71
+msgid "Show Day of the Week"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:72
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:72
 msgid "Show Month"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:74
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:74
 msgid "Clocks"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:77
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:77
 msgid "Dynamic Clocks Icon"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:78
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:78
 msgid "Show Seconds"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:80
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:80
 msgid "Weather"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:83
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:83
 msgid "Dynamic Weather Icon"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:84
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:84
 msgid "Show Background"
 msgstr ""
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:85
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:85
 msgid "Show Temperature"
 msgstr ""

@@ -1,7 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: \n"
-"POT-Creation-Date: \n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-09-23 02:35+0300\n"
 "PO-Revision-Date: \n"
 "Last-Translator: Fraxinus Acer\n"
 "Language-Team: \n"
@@ -11,54 +12,57 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: Poedit 3.6\n"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:37
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:37
 msgid "Follow System"
 msgstr "Следовать системным"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:39
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:39
 msgid "Theme"
 msgstr "Тема"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:67
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:67
 msgid "Calendar"
 msgstr "Календарь"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:70
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:70
 msgid "Dynamic Calendar Icon"
 msgstr "Иконка динамичного календаря"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:71
-msgid "Show Week Day"
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:71
+msgid "Show Day of the Week"
 msgstr "Показывать день недели"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:72
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:72
 msgid "Show Month"
 msgstr "Показывать месяц"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:74
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:74
 msgid "Clocks"
 msgstr "Часы"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:77
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:77
 msgid "Dynamic Clocks Icon"
 msgstr "Иконка динамичных часов"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:78
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:78
 msgid "Show Seconds"
 msgstr "Показывать секунды"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:80
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:80
 msgid "Weather"
 msgstr "Погода"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:83
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:83
 msgid "Dynamic Weather Icon"
 msgstr "Иконка динамичной погоды"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:84
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:84
 msgid "Show Background"
 msgstr "Показывать фон"
 
-#: ../dynamic-calendar-and-clocks-icons@thecalamityjoe87.github.com/prefs.js:85
+#: ../dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com/prefs.js:85
 msgid "Show Temperature"
 msgstr "Показывать температуру"
+
+#~ msgid "Show Week Day"
+#~ msgstr "Показывать день недели"
