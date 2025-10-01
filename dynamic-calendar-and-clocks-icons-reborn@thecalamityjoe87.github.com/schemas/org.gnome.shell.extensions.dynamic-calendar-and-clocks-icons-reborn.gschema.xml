@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<schemalist>
+<schemalist gettext-domain="dynamic-calendar-and-clocks-icons-reborn@thecalamityjoe87.github.com">
   <schema id="org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn"
   path="/org/gnome/shell/extensions/dynamic-calendar-and-clocks-icons-reborn/">
     <key name="theme" type="s">
