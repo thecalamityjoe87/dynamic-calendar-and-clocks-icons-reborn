@@ -5,10 +5,12 @@ import Pango from 'gi://Pango';
 import PangoCairo from 'gi://PangoCairo';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
+import GWeather from 'gi://GWeather';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Search from 'resource:///org/gnome/shell/ui/search.js';
 import * as Weather from 'resource:///org/gnome/shell/misc/weather.js';
+
 let Me;
 
 const CALENDAR_FILE = 'org.gnome.Calendar.desktop';
@@ -25,7 +27,51 @@ function createWeatherClient() {
     });
 }
 
+// Returns the GNOME Weather temperature unit setting as a string ('celsius' or 'fahrenheit')
+function getGnomeTemperatureUnit() {
+    // Path to the Flatpak settings keyfile for org.gnome.Weather
+    const keyfilePath = GLib.build_filenamev([
+        GLib.get_home_dir(),
+        '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
+    ]);
+
+    try {
+        if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
+            let content = GLib.file_get_contents(keyfilePath);
+            if (content[0]) {
+                let text = imports.byteArray.toString(content[1]);
+                // Look for the temperature unit key
+                // Example line: "unit='fahrenheit'" or "unit='celsius'"
+                let match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
+                if (match && match[1]) {
+                    return match[1].toLowerCase();
+                }
+            }
+        }
+    } catch (e) {
+        // On error, fallback to next method
+        log('Error reading GNOME Weather temperature unit: ' + e);
+    }
+
+    // Additional check: use Gio.Settings for org.gnome.GWeather4 if non-Flatpak version is installed.
+    try {
+        const gwSettings = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
+        // get_value returns a Variant, but we want a string
+        let unit = gwSettings.get_string('temperature-unit');
+        // GNOME uses 'centigrade' for Celsius in some schemas
+        if (unit === 'centigrade' || unit === 'celsius')
+            return 'celsius';
+        if (unit === 'fahrenheit')
+            return 'fahrenheit';
+    } catch (e) {
+        log('Error reading GWeather4 temperature unit: ' + e);
+    }
+    // fallback: default to regional locale setting
+    return 'default';
+}
+
 let settings, textureHandler, handlers = [];
+let tempUnitMonitor = null;
 let enableCalendar, showWeekday, showMonth, enableClocks, showSeconds;
 let enableWeather, showBackground, showTemperature;
 
@@ -79,6 +125,68 @@ function loadSettings() {
         showTemperature = settings.get_boolean('show-temperature');
         weatherClient.emit('changed');
     }));
+
+    // Start monitoring the GNOME Weather keyfile (or its settings directory)
+    // so temperature-unit changes cause an immediate icon refresh.
+    try {
+        createTemperatureUnitMonitor();
+    } catch (e) {
+        log('Error creating temperature unit monitor: ' + e);
+    }
+}
+
+// Create a monitor that watches the GNOME Weather settings Flatpak keyfile. 
+// When the keyfile is created/modified, emit the
+// weatherClient 'changed' signal so the icon updates immediately.
+function createTemperatureUnitMonitor() {
+    // Path to the Flatpak settings keyfile for org.gnome.Weather
+    const keyfilePath = GLib.build_filenamev([
+        GLib.get_home_dir(),
+        '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
+    ]);
+
+    // Helper to connect monitor
+    function connectMonitor(monitor) {
+        if (!monitor) return;
+        tempUnitMonitor = monitor;
+        tempUnitMonitor.connect('changed', () => {
+            // Let the weatherClient update the icons immediately
+            if (weatherClient && weatherClient.emit) {
+                weatherClient.emit('changed');
+            }
+        });
+    }
+
+    // If we already have a monitor, cancel it first.
+    if (tempUnitMonitor) {
+        try {
+            tempUnitMonitor.cancel();
+        } catch (e) {
+            log('Error cancelling existing tempUnitMonitor: ' + e);
+        }
+        tempUnitMonitor = null;
+    }
+
+    // Try to monitor the exact Flatpak keyfile if it exists, otherwise monitor the
+    // parent settings directory so creation/modification is observed.
+    let keyfile = Gio.File.new_for_path(keyfilePath);
+    if (keyfile.query_exists(null)) {
+        connectMonitor(keyfile.monitor_file(Gio.FileMonitorFlags.WATCH_MOVES, null));
+    } else {
+        // Monitor parent directory so we see the keyfile being created/modified
+        let dirPath = GLib.path_get_dirname(keyfilePath);
+        try {
+            let dir = Gio.File.new_for_path(dirPath);
+            // monitor_directory is available on Gio.File; fall back to monitor() if not
+            if (typeof dir.monitor_directory === 'function') {
+                connectMonitor(dir.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null));
+            } else {
+                connectMonitor(dir.monitor(Gio.FileMonitorFlags.WATCH_MOVES, null));
+            }
+        } catch (e) {
+            log('Error creating directory monitor for Flatpak keyfile: ' + e);
+        }
+    }
 }
 
 let path, themeData, stylesheetFile;
@@ -410,7 +518,20 @@ function repaintWeather(icon) {
     let iconName = 'weather-none', temperature = ' --°';
     if(forecast != null) {
         iconName = forecast.get_icon_name();
-        let [, tempValue] = forecast.get_value_temp(1);
+        // We should set the temperature according to the GNOME Weather setting that user chooses
+        // If in the event, the setting cannot be determined, default to regional locale.
+        let unit = getGnomeTemperatureUnit();
+        let tempValue;
+        if (unit === 'fahrenheit') {
+            // Fahrenheit value
+            [, tempValue] = forecast.get_value_temp(4);
+        } else if (unit === 'celsius' || unit === 'centigrade') {
+            // Celsius value
+            [, tempValue] = forecast.get_value_temp(3);
+        } else {
+            // Fallback: Default type is regional locale
+            [, tempValue] = forecast.get_value_temp(1);
+        }
         let prefix = Math.round(tempValue) >= 0 ? ' ' : '';
         temperature = prefix + Math.round(tempValue) + '°';
     }
