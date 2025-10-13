@@ -5,12 +5,10 @@ import Pango from 'gi://Pango';
 import PangoCairo from 'gi://PangoCairo';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
-import GWeather from 'gi://GWeather';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Search from 'resource:///org/gnome/shell/ui/search.js';
 import * as Weather from 'resource:///org/gnome/shell/misc/weather.js';
-
 let Me;
 
 const CALENDAR_FILE = 'org.gnome.Calendar.desktop';
@@ -27,21 +25,20 @@ function createWeatherClient() {
     });
 }
 
-// Returns the GNOME Weather temperature unit setting as a string ('celsius' or 'fahrenheit')
+// Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
 function getGnomeTemperatureUnit() {
     // Path to the Flatpak settings keyfile for org.gnome.Weather
     const keyfilePath = GLib.build_filenamev([
         GLib.get_home_dir(),
         '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
     ]);
-
     try {
         if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
             let content = GLib.file_get_contents(keyfilePath);
             if (content[0]) {
                 let text = imports.byteArray.toString(content[1]);
                 // Look for the temperature unit key
-                // Example line: "unit='fahrenheit'" or "unit='celsius'"
+                // Example line: "temperature-unit='fahrenheit'" or "temperature-unit='celsius'"
                 let match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
                 if (match && match[1]) {
                     return match[1].toLowerCase();
@@ -52,7 +49,6 @@ function getGnomeTemperatureUnit() {
         // On error, fallback to next method
         log('Error reading GNOME Weather temperature unit: ' + e);
     }
-
     // Additional check: use Gio.Settings for org.gnome.GWeather4 if non-Flatpak version is installed.
     try {
         const gwSettings = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
@@ -125,7 +121,6 @@ function loadSettings() {
         showTemperature = settings.get_boolean('show-temperature');
         weatherClient.emit('changed');
     }));
-
     // Start monitoring the GNOME Weather keyfile (or its settings directory)
     // so temperature-unit changes cause an immediate icon refresh.
     try {
@@ -144,7 +139,6 @@ function createTemperatureUnitMonitor() {
         GLib.get_home_dir(),
         '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
     ]);
-
     // Helper to connect monitor
     function connectMonitor(monitor) {
         if (!monitor) return;
@@ -156,7 +150,6 @@ function createTemperatureUnitMonitor() {
             }
         });
     }
-
     // If we already have a monitor, cancel it first.
     if (tempUnitMonitor) {
         try {
@@ -166,7 +159,6 @@ function createTemperatureUnitMonitor() {
         }
         tempUnitMonitor = null;
     }
-
     // Try to monitor the exact Flatpak keyfile if it exists, otherwise monitor the
     // parent settings directory so creation/modification is observed.
     let keyfile = Gio.File.new_for_path(keyfilePath);
