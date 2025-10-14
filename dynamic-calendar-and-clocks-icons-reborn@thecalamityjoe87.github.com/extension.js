@@ -122,14 +122,6 @@ function loadSettings() {
         showTemperature = settings.get_boolean('show-temperature');
         weatherClient.emit('changed');
     }));
-    // Start monitoring the GNOME Weather keyfile (or its settings directory)
-    // so temperature-unit changes cause an immediate icon refresh.
-    try {
-        createTemperatureUnitMonitor();
-    } catch (e) {
-        console.error('Error creating temperature unit monitor');
-        console.error(e);
-    }
 }
 
 // Create a monitor that watches the GNOME Weather settings Flatpak keyfile. 
@@ -147,9 +139,7 @@ function createTemperatureUnitMonitor() {
         tempUnitMonitor = monitor;
         tempUnitMonitor.connect('changed', () => {
             // Let the weatherClient update the icons immediately
-            if (weatherClient && weatherClient.emit) {
-                weatherClient.emit('changed');
-            }
+            weatherClient.emit('changed');
         });
     }
     // If we already have a monitor, cancel it first.
@@ -166,22 +156,8 @@ function createTemperatureUnitMonitor() {
     // parent settings directory so creation/modification is observed.
     let keyfile = Gio.File.new_for_path(keyfilePath);
     if (keyfile.query_exists(null)) {
-        connectMonitor(keyfile.monitor_file(Gio.FileMonitorFlags.WATCH_MOVES, null));
-    } else {
-        // Monitor parent directory so we see the keyfile being created/modified
-        let dirPath = GLib.path_get_dirname(keyfilePath);
-        try {
-            let dir = Gio.File.new_for_path(dirPath);
-            // monitor_directory is available on Gio.File; fall back to monitor() if not
-            if (typeof dir.monitor_directory === 'function') {
-                connectMonitor(dir.monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, null));
-            } else {
-                connectMonitor(dir.monitor(Gio.FileMonitorFlags.WATCH_MOVES, null));
-            }
-        } catch (e) {
-            console.error('Error creating directory monitor for Flatpak keyfile');
-            console.error(e);
-        }
+        // Watch for file changes (modifications)
+        connectMonitor(keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null));
     }
 }
 
@@ -698,6 +674,9 @@ export default class DynamicIconsExtension extends Extension {
         Me = this;
         createWeatherClient();
         loadSettings();
+        // Start monitoring the GNOME Weather keyfile so 
+        // temperature-unit changes cause an immediate icon refresh.
+        createTemperatureUnitMonitor();
         originalCreate = Shell.App.prototype.create_icon_texture;
         Shell.App.prototype.create_icon_texture = createIconTexture;
         redisplayIcons();
