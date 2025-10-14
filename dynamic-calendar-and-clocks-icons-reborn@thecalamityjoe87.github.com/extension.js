@@ -45,8 +45,9 @@ function getGnomeTemperatureUnit() {
             }
         }
     } catch (e) {
-        // On error, fallback to next method
-        log('Error reading GNOME Weather temperature unit: ' + e);
+        // On error, log and fallback to next method
+        console.error('Error reading GNOME Weather temperature unit');
+        console.error(e);
     }
     // Additional check: use Gio.Settings for org.gnome.GWeather4 if non-Flatpak version is installed.
     try {
@@ -59,14 +60,15 @@ function getGnomeTemperatureUnit() {
         if (unit === 'fahrenheit')
             return 'fahrenheit';
     } catch (e) {
-        log('Error reading GWeather4 temperature unit: ' + e);
+        console.error('Error reading GWeather4 temperature unit');
+        console.error(e);
     }
     // fallback: default to regional locale setting
     return 'default';
 }
 
 let settings, textureHandler, handlers = [];
-let tempUnitMonitor = null;
+let tempUnitMonitor;
 let enableCalendar, showWeekday, showMonth, enableClocks, showSeconds;
 let enableWeather, showBackground, showTemperature;
 
@@ -125,7 +127,8 @@ function loadSettings() {
     try {
         createTemperatureUnitMonitor();
     } catch (e) {
-        log('Error creating temperature unit monitor: ' + e);
+        console.error('Error creating temperature unit monitor');
+        console.error(e);
     }
 }
 
@@ -154,7 +157,8 @@ function createTemperatureUnitMonitor() {
         try {
             tempUnitMonitor.cancel();
         } catch (e) {
-            log('Error cancelling existing tempUnitMonitor: ' + e);
+            console.error('Error cancelling existing tempUnitMonitor');
+            console.error(e);
         }
         tempUnitMonitor = null;
     }
@@ -175,7 +179,8 @@ function createTemperatureUnitMonitor() {
                 connectMonitor(dir.monitor(Gio.FileMonitorFlags.WATCH_MOVES, null));
             }
         } catch (e) {
-            log('Error creating directory monitor for Flatpak keyfile: ' + e);
+            console.error('Error creating directory monitor for Flatpak keyfile');
+            console.error(e);
         }
     }
 }
@@ -685,6 +690,7 @@ function destroyObjects() {
     settings = textureHandler = themeData = stylesheetFile = null;
     calendar = symbolicCalendar = clocks = symbolicClocks = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
+    tempUnitMonitor = null;
 }
 
 export default class DynamicIconsExtension extends Extension {
