@@ -152,11 +152,10 @@ function createTemperatureUnitMonitor() {
         }
         tempUnitMonitor = null;
     }
-    // Try to monitor the exact Flatpak keyfile if it exists, otherwise monitor the
-    // parent settings directory so creation/modification is observed.
+    // Try to monitor the exact Flatpak keyfile if it exists
     let keyfile = Gio.File.new_for_path(keyfilePath);
     if (keyfile.query_exists(null)) {
-        // Watch for file changes (modifications)
+        // Watch for file changes to the keyfile
         connectMonitor(keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null));
     }
 }
