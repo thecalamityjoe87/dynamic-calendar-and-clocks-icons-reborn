@@ -187,11 +187,12 @@ function loadTheme() {
     loadSurfaces();
 }
 
-let calendar, symbolicCalendar, clocks, symbolicClocks;
+let calendar, calendar48, symbolicCalendar, clocks, symbolicClocks;
 let hour, symbolicHour, minute, symbolicMinute, second;
 
 function loadSurfaces() {
     calendar = loadSurface('calendar.png');
+    calendar48 = loadOptionalSurface('calendar-48.png');
     symbolicCalendar = loadSurface('calendar-symbolic.png');
     clocks = loadSurface('clocks.png');
     symbolicClocks = loadSurface('clocks-symbolic.png');
@@ -204,6 +205,14 @@ function loadSurfaces() {
 
 function loadSurface(file) {
     return Cairo.ImageSurface.createFromPNG(path + file);
+}
+
+function loadOptionalSurface(file) {
+    let filePath = path + file;
+    if(!Gio.File.new_for_path(filePath).query_exists(null)) {
+        return null;
+    }
+    return Cairo.ImageSurface.createFromPNG(filePath);
 }
 
 let originalCreate;
@@ -350,9 +359,15 @@ function repaintCalendar(icon) {
     let {dateFont, dateSize, datePos, dateOnlyPos} = themeData;
     let context = icon.get_context();
     let iconSize = getIconSize(icon, context);
-    let scaleFactor = iconSize / 512;
+    let calendarBackground = calendar;
+    let calendarBackgroundSize = 512;
+    if(icon.requestedIconSize <= 48 && calendar48 != null) {
+        calendarBackground = calendar48;
+        calendarBackgroundSize = 48 * 2;
+    }
+    let scaleFactor = iconSize / calendarBackgroundSize;
     context.scale(scaleFactor, scaleFactor);
-    context.setSourceSurface(calendar, 0, 0);
+    context.setSourceSurface(calendarBackground, 0, 0);
     context.paint();
     scaleFactor = 1 / scaleFactor;
     context.scale(scaleFactor, scaleFactor);
@@ -665,7 +680,8 @@ function destroyObjects() {
     handlers = [];
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
-    calendar = symbolicCalendar = clocks = symbolicClocks = null;
+    calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
+    calendar48Size = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
     tempUnitMonitor = null;
 }
