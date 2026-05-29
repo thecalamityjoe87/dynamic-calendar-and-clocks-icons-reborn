@@ -687,7 +687,6 @@ function destroyObjects() {
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
-    calendar48Size = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
     tempUnitMonitor = null;
 }
