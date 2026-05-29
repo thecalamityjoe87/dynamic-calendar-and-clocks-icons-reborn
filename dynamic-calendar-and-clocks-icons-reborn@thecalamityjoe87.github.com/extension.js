@@ -396,6 +396,9 @@ function repaintCalendar(icon) {
     context.setFontSize(iconSize / 96 * dateSize);
     let dateExtents = context.textExtents(date);
     let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
+    if (date.endsWith("1")) {
+        dateX -= 1;
+    }
     datePos = showWeekday || showMonth ? datePos : dateOnlyPos;
     context.moveTo(dateX, iconSize / 96 * datePos);
     context.showText(date);
@@ -426,6 +429,9 @@ function repaintSymbolicCalendar(icon) {
     context.setFontSize(iconSize / 16 * symDateSize);
     let dateExtents = context.textExtents(date);
     let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
+    if (date.endsWith("1")) {
+        dateX -= 1;
+    }
     context.moveTo(dateX, iconSize / 16 * symDatePos);
     context.showText(date);
     context.$dispose();
