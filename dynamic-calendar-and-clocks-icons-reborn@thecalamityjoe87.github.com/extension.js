@@ -361,9 +361,14 @@ function repaintCalendar(icon) {
     let iconSize = getIconSize(icon, context);
     let calendarBackground = calendar;
     let calendarBackgroundSize = 512;
-    if(icon.requestedIconSize <= 48 && calendar48 != null) {
+    let requestedSize = icon.requestedIconSize;
+    if(requestedSize == -1) {
+        let themeContext = St.ThemeContext.get_for_stage(global.stage);
+        requestedSize = iconSize / themeContext.scale_factor;
+    }
+    if(requestedSize <= 48 && calendar48 != null) {
         calendarBackground = calendar48;
-        calendarBackgroundSize = 48 * 2;
+        calendarBackgroundSize = 96;
     }
     let scaleFactor = iconSize / calendarBackgroundSize;
     context.scale(scaleFactor, scaleFactor);
@@ -397,7 +402,7 @@ function repaintCalendar(icon) {
     let dateExtents = context.textExtents(date);
     let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
     if (date.endsWith("1")) {
-        dateX -= 1;
+        dateX -= iconSize / 64;
     }
     datePos = showWeekday || showMonth ? datePos : dateOnlyPos;
     context.moveTo(dateX, iconSize / 96 * datePos);
@@ -430,7 +435,7 @@ function repaintSymbolicCalendar(icon) {
     let dateExtents = context.textExtents(date);
     let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
     if (date.endsWith("1")) {
-        dateX -= 1;
+        dateX -= iconSize / 64;
     }
     context.moveTo(dateX, iconSize / 16 * symDatePos);
     context.showText(date);
