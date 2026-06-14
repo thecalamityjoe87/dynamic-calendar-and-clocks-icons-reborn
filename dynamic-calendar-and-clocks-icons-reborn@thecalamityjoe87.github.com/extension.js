@@ -187,11 +187,12 @@ function loadTheme() {
     loadSurfaces();
 }
 
-let calendar, symbolicCalendar, clocks, symbolicClocks;
+let calendar, calendar48, symbolicCalendar, clocks, symbolicClocks;
 let hour, symbolicHour, minute, symbolicMinute, second;
 
 function loadSurfaces() {
     calendar = loadSurface('calendar.png');
+    calendar48 = loadOptionalSurface('calendar-48.png');
     symbolicCalendar = loadSurface('calendar-symbolic.png');
     clocks = loadSurface('clocks.png');
     symbolicClocks = loadSurface('clocks-symbolic.png');
@@ -204,6 +205,14 @@ function loadSurfaces() {
 
 function loadSurface(file) {
     return Cairo.ImageSurface.createFromPNG(path + file);
+}
+
+function loadOptionalSurface(file) {
+    let filePath = path + file;
+    if(!Gio.File.new_for_path(filePath).query_exists(null)) {
+        return null;
+    }
+    return Cairo.ImageSurface.createFromPNG(filePath);
 }
 
 let originalCreate;
@@ -322,6 +331,12 @@ function addIconToArray(icon, disposeFunc, array) {
     array.push(icon);
 }
 
+function calculateDateOffset(iconSize, date) {
+		const unit = iconSize / 48;
+		const numOnes = date.split('1').length - 1;
+		return unit * numOnes / date.length;
+}
+
 function repaintCalendar(icon) {
     if(icon.get_stage() == null) return;
     if(icon.get_theme_node().get_icon_style() == 2) {
@@ -350,9 +365,20 @@ function repaintCalendar(icon) {
     let {dateFont, dateSize, datePos, dateOnlyPos} = themeData;
     let context = icon.get_context();
     let iconSize = getIconSize(icon, context);
-    let scaleFactor = iconSize / 512;
+    let calendarBackground = calendar;
+    let calendarBackgroundSize = 512;
+    let requestedSize = icon.requestedIconSize;
+    if(requestedSize == -1) {
+        let themeContext = St.ThemeContext.get_for_stage(global.stage);
+        requestedSize = iconSize / themeContext.scale_factor;
+    }
+    if(requestedSize <= 48 && calendar48 != null) {
+        calendarBackground = calendar48;
+        calendarBackgroundSize = 96;
+    }
+    let scaleFactor = iconSize / calendarBackgroundSize;
     context.scale(scaleFactor, scaleFactor);
-    context.setSourceSurface(calendar, 0, 0);
+    context.setSourceSurface(calendarBackground, 0, 0);
     context.paint();
     scaleFactor = 1 / scaleFactor;
     context.scale(scaleFactor, scaleFactor);
@@ -381,6 +407,7 @@ function repaintCalendar(icon) {
     context.setFontSize(iconSize / 96 * dateSize);
     let dateExtents = context.textExtents(date);
     let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
+    dateX -= calculateDateOffset(iconSize, date);
     datePos = showWeekday || showMonth ? datePos : dateOnlyPos;
     context.moveTo(dateX, iconSize / 96 * datePos);
     context.showText(date);
@@ -411,6 +438,7 @@ function repaintSymbolicCalendar(icon) {
     context.setFontSize(iconSize / 16 * symDateSize);
     let dateExtents = context.textExtents(date);
     let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
+    dateX -= calculateDateOffset(iconSize, date);
     context.moveTo(dateX, iconSize / 16 * symDatePos);
     context.showText(date);
     context.$dispose();
@@ -665,7 +693,7 @@ function destroyObjects() {
     handlers = [];
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
-    calendar = symbolicCalendar = clocks = symbolicClocks = null;
+    calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
     tempUnitMonitor = null;
 }
