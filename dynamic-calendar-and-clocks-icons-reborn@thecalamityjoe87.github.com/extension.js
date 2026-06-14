@@ -185,11 +185,12 @@ function loadTheme() {
     loadSurfaces();
 }
 
-let calendar, symbolicCalendar, clocks, symbolicClocks;
+let calendar, calendar48, symbolicCalendar, clocks, symbolicClocks;
 let hour, symbolicHour, minute, symbolicMinute, second;
 
 function loadSurfaces() {
     calendar = loadSurface('calendar.png');
+    calendar48 = loadOptionalSurface('calendar-48.png');
     symbolicCalendar = loadSurface('calendar-symbolic.png');
     clocks = loadSurface('clocks.png');
     symbolicClocks = loadSurface('clocks-symbolic.png');
@@ -202,6 +203,14 @@ function loadSurfaces() {
 
 function loadSurface(file) {
     return Cairo.ImageSurface.createFromPNG(path + file);
+}
+
+function loadOptionalSurface(file) {
+    let filePath = path + file;
+    if(!Gio.File.new_for_path(filePath).query_exists(null)) {
+        return null;
+    }
+    return Cairo.ImageSurface.createFromPNG(filePath);
 }
 
 let originalCreate;
@@ -320,6 +329,12 @@ function addIconToArray(icon, disposeFunc, array) {
     array.push(icon);
 }
 
+function calculateDateOffset(iconSize, date) {
+        const unit = iconSize / 48;
+        const numOnes = date.split('1').length - 1;
+        return unit * numOnes / date.length;
+}
+
 function repaintCalendar(icon) {
     if(icon.get_stage() == null) return;
     if(icon.get_theme_node().get_icon_style() == 2) {
@@ -348,9 +363,20 @@ function repaintCalendar(icon) {
     let {dateFont, dateSize, datePos, dateOnlyPos} = themeData;
     let context = icon.get_context();
     let iconSize = getIconSize(icon, context);
-    let scaleFactor = iconSize / 512;
+    let calendarBackground = calendar;
+    let calendarBackgroundSize = 512;
+    let requestedSize = icon.requestedIconSize;
+    if(requestedSize == -1) {
+        let themeContext = St.ThemeContext.get_for_stage(global.stage);
+        requestedSize = iconSize / themeContext.scale_factor;
+    }
+    if(requestedSize <= 48 && calendar48 != null) {
+        calendarBackground = calendar48;
+        calendarBackgroundSize = 96;
+    }
+    let scaleFactor = iconSize / calendarBackgroundSize;
     context.scale(scaleFactor, scaleFactor);
-    context.setSourceSurface(calendar, 0, 0);
+    context.setSourceSurface(calendarBackground, 0, 0);
     context.paint();
     scaleFactor = 1 / scaleFactor;
     context.scale(scaleFactor, scaleFactor);
@@ -414,11 +440,16 @@ function repaintSymbolicCalendar(icon) {
         context.setOperator(Cairo.Operator.DEST_OUT);
     }
     context.setSourceRGB(symDateR, symDateG, symDateB);
-    context.selectFontFace(symDateFont, 0, symDateBold);
-    context.setFontSize(iconSize / 16 * symDateSize);
-    let dateX = (iconSize - context.textExtents(date).width) / 2;
-    context.moveTo(dateX, iconSize / 16 * symDatePos);
-    context.showText(date);
+    
+    let dateLayout = PangoCairo.create_layout(context);
+    let dateDesc = ' font_desc="' + symDateFont + (symDateBold ? ' bold' : '') + ' ' + (iconSize / 16 * symDateSize) + 'px"';
+    dateLayout.set_markup('<span' + dateDesc + '>' + date + '</span>', -1);
+    
+    let dateX = (iconSize - dateLayout.get_pixel_size()[0]) / 2;
+    let dateBaseline = dateLayout.get_baseline() / Pango.SCALE;
+    
+    context.moveTo(dateX, iconSize / 16 * symDatePos - dateBaseline);
+    PangoCairo.show_layout(context, dateLayout);
     context.$dispose();
 }
 
@@ -604,38 +635,52 @@ function getIconSize(icon, context) {
 }
 
 function redisplayIcons() {
-    let controls = Main.overview._overview._controls;
+    let controls = Main.overview._controls;
+    if (!controls && Main.overview._overview) {
+        controls = Main.overview._overview._controls; // Fallback for legacy GNOME versions
+    }
+    
+    if (!controls) return;
+
     let appDisplay = controls._appDisplay;
-    let apps = appDisplay._orderedItems.slice();
-    apps.forEach(icon => {
-        if(icon._id == CALENDAR_FILE || icon._id == CLOCKS_FILE
-        || icon._id == WEATHER_FILE) {
-            icon.icon.update();
-        }
-    });
-    let folderIcons = appDisplay._folderIcons;
-    folderIcons.forEach(folderIcon => {
-        let appsInFolder = folderIcon.view._orderedItems.slice();
-        appsInFolder.forEach(icon => {
+    if (appDisplay) {
+        let apps = appDisplay._orderedItems.slice();
+        apps.forEach(icon => {
             if(icon._id == CALENDAR_FILE || icon._id == CLOCKS_FILE
             || icon._id == WEATHER_FILE) {
                 icon.icon.update();
             }
         });
-        folderIcon.icon.update();
-    });
-    let dash = controls.dash;
-    let children = dash._box.get_children().filter(actor => {
-        return actor.child
-        && actor.child._delegate && actor.child._delegate.app;
-    });
-    children.forEach(actor => {
-        let actorId = actor.child._delegate.app.get_id();
-        if(actorId == CALENDAR_FILE || actorId == CLOCKS_FILE
-        || actorId == WEATHER_FILE) {
-            actor.child.icon.update();
+        let folderIcons = appDisplay._folderIcons;
+        if (folderIcons) {
+            folderIcons.forEach(folderIcon => {
+                let appsInFolder = folderIcon.view._orderedItems.slice();
+                appsInFolder.forEach(icon => {
+                    if(icon._id == CALENDAR_FILE || icon._id == CLOCKS_FILE
+                    || icon._id == WEATHER_FILE) {
+                        icon.icon.update();
+                    }
+                });
+                folderIcon.icon.update();
+            });
         }
-    });
+    }
+
+    let dash = controls.dash;
+    if (dash && dash._box) {
+        let children = dash._box.get_children().filter(actor => {
+            return actor.child
+            && actor.child._delegate && actor.child._delegate.app;
+        });
+        children.forEach(actor => {
+            let actorId = actor.child._delegate.app.get_id();
+            if(actorId == CALENDAR_FILE || actorId == CLOCKS_FILE
+            || actorId == WEATHER_FILE) {
+                actor.child.icon.update();
+            }
+        });
+    }
+
     let textureCache = St.TextureCache.get_default();
     textureCache.disconnect(textureHandler);
     textureCache.emit('icon-theme-changed');
@@ -676,7 +721,7 @@ function destroyObjects() {
     
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
-    calendar = symbolicCalendar = clocks = symbolicClocks = null;
+    calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
     tempUnitMonitor = null;
 }
