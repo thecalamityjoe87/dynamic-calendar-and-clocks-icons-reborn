@@ -35,7 +35,7 @@ function getGnomeTemperatureUnit() {
         if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
             let content = GLib.file_get_contents(keyfilePath);
             if (content[0]) {
-                let text = imports.byteArray.toString(content[1]);
+                let text = new TextDecoder('utf-8').decode(content[1]);
                 // Look for the temperature unit key
                 // Example line: "temperature-unit='fahrenheit'" or "temperature-unit='celsius'"
                 let match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
@@ -73,8 +73,7 @@ let enableCalendar, showWeekday, showMonth, enableClocks, showSeconds;
 let enableWeather, showBackground, showTemperature;
 
 function loadSettings() {
-    settings = Me.getSettings
-    ('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
+    settings = Me.getSettings('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
     loadTheme();
     enableCalendar = settings.get_boolean('calendar');
     showWeekday = settings.get_boolean('show-weekday');
@@ -137,7 +136,7 @@ function createTemperatureUnitMonitor() {
     function connectMonitor(monitor) {
         if (!monitor) return;
         tempUnitMonitor = monitor;
-        tempUnitMonitor.connect('changed', () => {
+        tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', () => {
             // Let the weatherClient update the icons immediately
             weatherClient.emit('changed');
         });
@@ -166,8 +165,7 @@ function loadTheme() {
     let theme = settings.get_string('theme');
     path = Me.path + '/themes/' + theme;
     if(!theme || !Gio.File.new_for_path(path).query_exists(null)) {
-        let interfaceSettings = Me.getSettings
-        ('org.gnome.desktop.interface');
+        let interfaceSettings = Me.getSettings('org.gnome.desktop.interface');
         theme = interfaceSettings.get_string('icon-theme');
         path = Me.path + '/themes/' + theme;
         if(!theme || !Gio.File.new_for_path(path).query_exists(null)) {
@@ -332,9 +330,9 @@ function addIconToArray(icon, disposeFunc, array) {
 }
 
 function calculateDateOffset(iconSize, date) {
-		const unit = iconSize / 48;
-		const numOnes = date.split('1').length - 1;
-		return unit * numOnes / date.length;
+        const unit = iconSize / 48;
+        const numOnes = date.split('1').length - 1;
+        return unit * numOnes / date.length;
 }
 
 function repaintCalendar(icon) {
@@ -402,15 +400,23 @@ function repaintCalendar(icon) {
     let baseline = layout.get_baseline() / Pango.SCALE;
     context.moveTo(textX, iconSize / 96 * dayMonthPos - baseline);
     PangoCairo.show_layout(context, layout);
+    
     context.setSourceRGB(dateR, dateG, dateB);
-    context.selectFontFace(dateFont, 0, dateBold);
-    context.setFontSize(iconSize / 96 * dateSize);
-    let dateExtents = context.textExtents(date);
-    let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
-    dateX -= calculateDateOffset(iconSize, date);
+    
+    let dateLayout = PangoCairo.create_layout(context);
+    let dateDesc = ' font_desc="' + dateFont + (dateBold ? ' bold' : '') + ' ' + (iconSize / 96 * dateSize) + 'px"';
+    dateLayout.set_markup('<span' + dateDesc + '>' + date + '</span>', -1);
+    
+    let horizOffset = themeData.dateHorizontalOffset !== undefined ? themeData.dateHorizontalOffset : 0;
+    
+    let dateX = ((iconSize - dateLayout.get_pixel_size()[0]) / 2) + (iconSize / 96 * horizOffset);
+    
     datePos = showWeekday || showMonth ? datePos : dateOnlyPos;
-    context.moveTo(dateX, iconSize / 96 * datePos);
-    context.showText(date);
+    let dateBaseline = dateLayout.get_baseline() / Pango.SCALE;
+    
+    context.moveTo(dateX, iconSize / 96 * datePos - dateBaseline);
+    PangoCairo.show_layout(context, dateLayout);
+    
     context.$dispose();
 }
 
@@ -434,13 +440,16 @@ function repaintSymbolicCalendar(icon) {
         context.setOperator(Cairo.Operator.DEST_OUT);
     }
     context.setSourceRGB(symDateR, symDateG, symDateB);
-    context.selectFontFace(symDateFont, 0, symDateBold);
-    context.setFontSize(iconSize / 16 * symDateSize);
-    let dateExtents = context.textExtents(date);
-    let dateX = (iconSize - dateExtents.width) / 2 - dateExtents.xBearing;
-    dateX -= calculateDateOffset(iconSize, date);
-    context.moveTo(dateX, iconSize / 16 * symDatePos);
-    context.showText(date);
+    
+    let dateLayout = PangoCairo.create_layout(context);
+    let dateDesc = ' font_desc="' + symDateFont + (symDateBold ? ' bold' : '') + ' ' + (iconSize / 16 * symDateSize) + 'px"';
+    dateLayout.set_markup('<span' + dateDesc + '>' + date + '</span>', -1);
+    
+    let dateX = (iconSize - dateLayout.get_pixel_size()[0]) / 2;
+    let dateBaseline = dateLayout.get_baseline() / Pango.SCALE;
+    
+    context.moveTo(dateX, iconSize / 16 * symDatePos - dateBaseline);
+    PangoCairo.show_layout(context, dateLayout);
     context.$dispose();
 }
 
@@ -519,18 +528,13 @@ function repaintWeather(icon) {
     let iconName = 'weather-none', temperature = ' --°';
     if(forecast != null) {
         iconName = forecast.get_icon_name();
-        // We should set the temperature according to the GNOME Weather setting that user chooses
-        // If in the event, the setting cannot be determined, default to regional locale.
         let unit = getGnomeTemperatureUnit();
         let tempValue;
         if (unit === 'fahrenheit') {
-            // Fahrenheit value
             [, tempValue] = forecast.get_value_temp(4);
         } else if (unit === 'celsius' || unit === 'centigrade') {
-            // Celsius value
             [, tempValue] = forecast.get_value_temp(3);
         } else {
-            // Fallback: Default type is regional locale
             [, tempValue] = forecast.get_value_temp(1);
         }
         let prefix = Math.round(tempValue) >= 0 ? ' ' : '';
@@ -631,38 +635,52 @@ function getIconSize(icon, context) {
 }
 
 function redisplayIcons() {
-    let controls = Main.overview._overview._controls;
+    let controls = Main.overview._controls;
+    if (!controls && Main.overview._overview) {
+        controls = Main.overview._overview._controls; // Fallback for legacy GNOME versions
+    }
+    
+    if (!controls) return;
+
     let appDisplay = controls._appDisplay;
-    let apps = appDisplay._orderedItems.slice();
-    apps.forEach(icon => {
-        if(icon._id == CALENDAR_FILE || icon._id == CLOCKS_FILE
-        || icon._id == WEATHER_FILE) {
-            icon.icon.update();
-        }
-    });
-    let folderIcons = appDisplay._folderIcons;
-    folderIcons.forEach(folderIcon => {
-        let appsInFolder = folderIcon.view._orderedItems.slice();
-        appsInFolder.forEach(icon => {
+    if (appDisplay) {
+        let apps = appDisplay._orderedItems.slice();
+        apps.forEach(icon => {
             if(icon._id == CALENDAR_FILE || icon._id == CLOCKS_FILE
             || icon._id == WEATHER_FILE) {
                 icon.icon.update();
             }
         });
-        folderIcon.icon.update();
-    });
-    let dash = controls.dash;
-    let children = dash._box.get_children().filter(actor => {
-        return actor.child
-        && actor.child._delegate && actor.child._delegate.app;
-    });
-    children.forEach(actor => {
-        let actorId = actor.child._delegate.app.get_id();
-        if(actorId == CALENDAR_FILE || actorId == CLOCKS_FILE
-        || actorId == WEATHER_FILE) {
-            actor.child.icon.update();
+        let folderIcons = appDisplay._folderIcons;
+        if (folderIcons) {
+            folderIcons.forEach(folderIcon => {
+                let appsInFolder = folderIcon.view._orderedItems.slice();
+                appsInFolder.forEach(icon => {
+                    if(icon._id == CALENDAR_FILE || icon._id == CLOCKS_FILE
+                    || icon._id == WEATHER_FILE) {
+                        icon.icon.update();
+                    }
+                });
+                folderIcon.icon.update();
+            });
         }
-    });
+    }
+
+    let dash = controls.dash;
+    if (dash && dash._box) {
+        let children = dash._box.get_children().filter(actor => {
+            return actor.child
+            && actor.child._delegate && actor.child._delegate.app;
+        });
+        children.forEach(actor => {
+            let actorId = actor.child._delegate.app.get_id();
+            if(actorId == CALENDAR_FILE || actorId == CLOCKS_FILE
+            || actorId == WEATHER_FILE) {
+                actor.child.icon.update();
+            }
+        });
+    }
+
     let textureCache = St.TextureCache.get_default();
     textureCache.disconnect(textureHandler);
     textureCache.emit('icon-theme-changed');
@@ -691,6 +709,16 @@ function destroyObjects() {
         settings.disconnect(handler);
     });
     handlers = [];
+    
+    if (tempUnitMonitor) {
+        try {
+            tempUnitMonitor.disconnect(tempUnitMonitor.handlerId);
+            tempUnitMonitor.cancel();
+        } catch (e) {
+            console.error('Error destroying tempUnitMonitor:', e);
+        }
+    }
+    
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
@@ -703,8 +731,6 @@ export default class DynamicIconsExtension extends Extension {
         Me = this;
         createWeatherClient();
         loadSettings();
-        // Start monitoring the GNOME Weather keyfile so 
-        // temperature-unit changes cause an immediate icon refresh.
         createTemperatureUnitMonitor();
         originalCreate = Shell.App.prototype.create_icon_texture;
         Shell.App.prototype.create_icon_texture = createIconTexture;
