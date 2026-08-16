@@ -767,7 +767,6 @@ function destroyObjects() {
     }
 
     weatherClient = weatherTimeout = null;
-    textureHandler = themeData = stylesheetFile = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
     tempUnitMonitor = null;
@@ -789,6 +788,9 @@ export default class DynamicIconsExtension extends Extension {
         redisplayIcons();
         destroyObjects();
         settings = null;
+        textureHandler = null;
+        themeData = null;
+        stylesheetFile = null;
         Me = null;
     }
 }
