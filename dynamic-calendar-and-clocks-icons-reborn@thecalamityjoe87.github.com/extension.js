@@ -47,6 +47,7 @@ function getGnomeTemperatureUnit() {
         }
     }
 
+     // Additional check: use Gio.Settings for org.gnome.GWeather4 if non-Flatpak version is installed.
     if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
         const gwSettings = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
         const unit = gwSettings.get_string('temperature-unit');
@@ -56,6 +57,7 @@ function getGnomeTemperatureUnit() {
             return 'fahrenheit';
     }
 
+    // Fallback: default to regional locale setting
     return 'default';
 }
 
@@ -713,7 +715,6 @@ function destroyObjects() {
         tempUnitMonitor = null;
     }
 
-    cachedTemperatureUnit = 'default';
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
