@@ -18,57 +18,50 @@ let weatherClient, weatherTimeout;
 
 function createWeatherClient() {
     weatherClient = new Weather.WeatherClient();
+    cachedTemperatureUnit = getGnomeTemperatureUnit();
     weatherTimeout = GLib.timeout_add_seconds(0, 30, () => {
         weatherClient.info.update();
         return true;
     });
 }
 
-// Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
-function getGnomeTemperatureUnit() {
-    // Path to the Flatpak settings keyfile for org.gnome.Weather
-    const keyfilePath = GLib.build_filenamev([
+// Path to Flatpak keyfile
+function getWeatherSettingsKeyfilePath() {
+    return GLib.build_filenamev([
         GLib.get_home_dir(),
         '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
     ]);
-    try {
-        if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
-            let content = GLib.file_get_contents(keyfilePath);
-            if (content[0]) {
-                let text = new TextDecoder('utf-8').decode(content[1]);
-                // Look for the temperature unit key
-                // Example line: "temperature-unit='fahrenheit'" or "temperature-unit='celsius'"
-                let match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
-                if (match && match[1]) {
-                    return match[1].toLowerCase();
-                }
+}
+
+// Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
+function getGnomeTemperatureUnit() {
+    const keyfilePath = getWeatherSettingsKeyfilePath();
+    if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
+        const content = GLib.file_get_contents(keyfilePath);
+        if (content[0]) {
+            const text = new TextDecoder('utf-8').decode(content[1]);
+            const match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
+            if (match && match[1]) {
+                return match[1].toLowerCase();
             }
         }
-    } catch (e) {
-        // On error, log and fallback to next method
-        console.error('Error reading GNOME Weather temperature unit');
-        console.error(e);
     }
-    // Additional check: use Gio.Settings for org.gnome.GWeather4 if non-Flatpak version is installed.
-    try {
+
+    if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
         const gwSettings = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
-        // get_value returns a Variant, but we want a string
-        let unit = gwSettings.get_string('temperature-unit');
-        // GNOME uses 'centigrade' for Celsius in some schemas
+        const unit = gwSettings.get_string('temperature-unit');
         if (unit === 'centigrade' || unit === 'celsius')
             return 'celsius';
         if (unit === 'fahrenheit')
             return 'fahrenheit';
-    } catch (e) {
-        console.error('Error reading GWeather4 temperature unit');
-        console.error(e);
     }
-    // fallback: default to regional locale setting
+
     return 'default';
 }
 
 let settings, textureHandler, handlers = [];
-let tempUnitMonitor;
+let tempUnitMonitor = null;
+let cachedTemperatureUnit = 'default';
 let enableCalendar, showWeekday, showMonth, enableClocks, showSeconds;
 let enableWeather, showBackground, showTemperature;
 
@@ -123,40 +116,42 @@ function loadSettings() {
     }));
 }
 
-// Create a monitor that watches the GNOME Weather settings Flatpak keyfile. 
-// When the keyfile is created/modified, emit the
-// weatherClient 'changed' signal so the icon updates immediately.
+// Monitor the Flatpak GNOME Weather keyfile when present.
 function createTemperatureUnitMonitor() {
-    // Path to the Flatpak settings keyfile for org.gnome.Weather
-    const keyfilePath = GLib.build_filenamev([
-        GLib.get_home_dir(),
-        '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
-    ]);
-    // Helper to connect monitor
-    function connectMonitor(monitor) {
-        if (!monitor) return;
-        tempUnitMonitor = monitor;
-        tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', () => {
-            // Let the weatherClient update the icons immediately
-            weatherClient.emit('changed');
-        });
-    }
-    // If we already have a monitor, cancel it first.
-    if (tempUnitMonitor) {
-        try {
-            tempUnitMonitor.cancel();
-        } catch (e) {
-            console.error('Error cancelling existing tempUnitMonitor');
-            console.error(e);
+    const notify = () => {
+        const newUnit = getGnomeTemperatureUnit();
+        if (newUnit !== cachedTemperatureUnit) {
+            cachedTemperatureUnit = newUnit;
+            if (weatherClient && weatherClient.info) {
+                weatherClient.info.update();
+            }
+            if (weatherClient) {
+                weatherClient.emit('changed');
+            }
         }
+    };
+
+    if (tempUnitMonitor) {
+        if (tempUnitMonitor.handlerId) {
+            tempUnitMonitor.disconnect(tempUnitMonitor.handlerId);
+        }
+        tempUnitMonitor.cancel();
         tempUnitMonitor = null;
     }
-    // Try to monitor the exact Flatpak keyfile if it exists
-    let keyfile = Gio.File.new_for_path(keyfilePath);
-    if (keyfile.query_exists(null)) {
-        // Watch for file changes to the keyfile
-        connectMonitor(keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null));
+
+    const keyfilePath = getWeatherSettingsKeyfilePath();
+    const keyfile = Gio.File.new_for_path(keyfilePath);
+    if (!keyfile.query_exists(null)) {
+        return;
     }
+
+    const monitor = keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null);
+    if (!monitor) {
+        return;
+    }
+
+    tempUnitMonitor = monitor;
+    tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', notify);
 }
 
 let path, themeData, stylesheetFile;
@@ -711,14 +706,14 @@ function destroyObjects() {
     handlers = [];
     
     if (tempUnitMonitor) {
-        try {
+        if (tempUnitMonitor.handlerId) {
             tempUnitMonitor.disconnect(tempUnitMonitor.handlerId);
-            tempUnitMonitor.cancel();
-        } catch (e) {
-            console.error('Error destroying tempUnitMonitor:', e);
         }
+        tempUnitMonitor.cancel();
+        tempUnitMonitor = null;
     }
-    
+
+    cachedTemperatureUnit = 'default';
     weatherClient = weatherTimeout = null;
     settings = textureHandler = themeData = stylesheetFile = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
