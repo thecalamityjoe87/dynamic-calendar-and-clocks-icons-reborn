@@ -34,7 +34,7 @@ function getWeatherSettingsKeyfilePath() {
 }
 
 // Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
-function getGnomeTemperatureUnit() {
+/*function getGnomeTemperatureUnit() {
     const keyfilePath = getWeatherSettingsKeyfilePath();
     if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
         const content = GLib.file_get_contents(keyfilePath);
@@ -58,6 +58,31 @@ function getGnomeTemperatureUnit() {
     }
 
     // Fallback: default to regional locale setting
+    return 'default';
+}*/
+
+// Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
+async function getGnomeTemperatureUnitAsync() {
+    const keyfilePath = getWeatherSettingsKeyfilePath();
+    const file = Gio.File.new_for_path(keyfilePath);
+
+    if (file.query_exists(null)) {
+        const [contents] = await file.load_contents_async(null);
+        const text = new TextDecoder('utf-8').decode(contents);
+        const match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
+        if (match && match[1])
+            return match[1].toLowerCase();
+    }
+
+    if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
+        const gwSettings = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
+        const unit = gwSettings.get_string('temperature-unit');
+        if (unit === 'centigrade' || unit === 'celsius')
+            return 'celsius';
+        if (unit === 'fahrenheit')
+            return 'fahrenheit';
+    }
+
     return 'default';
 }
 
@@ -158,7 +183,7 @@ function createTemperatureUnitMonitor() {
 
 let path, themeData, stylesheetFile;
 
-function loadTheme() {
+/*function loadTheme() {
     let theme = settings.get_string('theme');
     path = Me.path + '/themes/' + theme;
     if(!theme || !Gio.File.new_for_path(path).query_exists(null)) {
@@ -175,6 +200,32 @@ function loadTheme() {
     themeData = JSON.parse(new TextDecoder('utf-8').decode(json));
     let context = St.ThemeContext.get_for_stage(global.stage);
     if(stylesheetFile) {
+        context.get_theme().unload_stylesheet(stylesheetFile);
+    }
+    stylesheetFile = Gio.File.new_for_path(path + 'stylesheet.css');
+    context.get_theme().load_stylesheet(stylesheetFile);
+    loadSurfaces();
+}*/
+
+async function loadTheme() {
+    let theme = settings.get_string('theme');
+    let path = Me.path + '/themes/' + theme;
+    if (!theme || !Gio.File.new_for_path(path).query_exists(null)) {
+        let interfaceSettings = Me.getSettings('org.gnome.desktop.interface');
+        theme = interfaceSettings.get_string('icon-theme');
+        path = Me.path + '/themes/' + theme;
+        if (!theme || !Gio.File.new_for_path(path).query_exists(null)) {
+            path = Me.path + '/themes/Adwaita';
+        }
+    }
+    path += '/';
+
+    let jsonFile = Gio.File.new_for_path(path + 'theme-data.json');
+    let [json] = await jsonFile.load_contents_async(null);
+    themeData = JSON.parse(new TextDecoder('utf-8').decode(json));
+
+    let context = St.ThemeContext.get_for_stage(global.stage);
+    if (stylesheetFile) {
         context.get_theme().unload_stylesheet(stylesheetFile);
     }
     stylesheetFile = Gio.File.new_for_path(path + 'stylesheet.css');
@@ -716,7 +767,7 @@ function destroyObjects() {
     }
 
     weatherClient = weatherTimeout = null;
-    settings = textureHandler = themeData = stylesheetFile = null;
+    textureHandler = themeData = stylesheetFile = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
     tempUnitMonitor = null;
@@ -737,6 +788,7 @@ export default class DynamicIconsExtension extends Extension {
         Shell.App.prototype.create_icon_texture = originalCreate;
         redisplayIcons();
         destroyObjects();
+        settings = null;
         Me = null;
     }
 }
