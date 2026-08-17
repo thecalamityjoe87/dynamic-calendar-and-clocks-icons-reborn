@@ -22,6 +22,13 @@ async function createWeatherClient() {
     weatherTimeout = GLib.timeout_add_seconds(0, 30, () => {
         weatherClient.info.update();
         refreshTemperatureUnit();
+        // Covers the case where the weather app (Flatpak) wasn't installed
+        // yet when we enabled - there was no keyfile to watch back then, so
+        // pick it up here once it exists instead of staying on this poll
+        // forever.
+        if (!tempUnitMonitor) {
+            watchFlatpakKeyfile();
+        }
         return true;
     });
     if (weatherClient) {
@@ -140,17 +147,7 @@ function loadSettings() {
 // createWeatherClient() catches it either way if we miss an event here.
 function createTemperatureUnitMonitor() {
     // Flatpak GNOME Weather: watch the keyfile if it exists.
-    const keyfilePath = getWeatherSettingsKeyfilePath();
-    const keyfile = Gio.File.new_for_path(keyfilePath);
-    if (keyfile.query_exists(null)) {
-        const monitor = keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null);
-        if (monitor) {
-            tempUnitMonitor = monitor;
-            tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', () => {
-                refreshTemperatureUnit();
-            });
-        }
-    }
+    watchFlatpakKeyfile();
 
     // Distro-packaged GNOME Weather: watch the GSettings key
     // directly, since there's no keyfile to monitor in this case.
@@ -160,6 +157,26 @@ function createTemperatureUnitMonitor() {
             refreshTemperatureUnit();
         });
     }
+}
+
+function watchFlatpakKeyfile() {
+    const keyfilePath = getWeatherSettingsKeyfilePath();
+    const keyfile = Gio.File.new_for_path(keyfilePath);
+    if (!keyfile.query_exists(null)) {
+        return;
+    }
+ 
+    const monitor = keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null);
+    if (!monitor) {
+        return;
+    }
+ 
+    tempUnitMonitor = monitor;
+    tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', () => {
+        refreshTemperatureUnit();
+        teardownFlatpakKeyfileWatch();
+        watchFlatpakKeyfile();
+    });
 }
 
 // Helper function to destroy Flatpak keyfile watcher
