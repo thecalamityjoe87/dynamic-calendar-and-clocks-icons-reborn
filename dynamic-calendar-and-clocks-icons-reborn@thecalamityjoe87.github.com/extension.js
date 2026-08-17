@@ -16,13 +16,34 @@ const WEATHER_FILE = 'org.gnome.Weather.desktop';
 
 let weatherClient, weatherTimeout;
 
-function createWeatherClient() {
+async function createWeatherClient() {
     weatherClient = new Weather.WeatherClient();
-    cachedTemperatureUnit = getGnomeTemperatureUnit();
+    cachedTemperatureUnit = await getGnomeTemperatureUnitAsync();
     weatherTimeout = GLib.timeout_add_seconds(0, 30, () => {
         weatherClient.info.update();
+        refreshTemperatureUnit();
         return true;
     });
+    if (weatherClient) {
+        weatherClient.emit('changed');
+    }
+}
+
+// Re-reads the temperature unit and, if it changed, updates the cache and
+// triggers a repaint. Called both by the file/GSettings watchers (for a
+// prompt response) and on a 30s timer (as a guaranteed self-correcting
+// fallback, in case a watcher event is ever missed).
+async function refreshTemperatureUnit() {
+    const newUnit = await getGnomeTemperatureUnitAsync();
+    if (newUnit !== cachedTemperatureUnit) {
+        cachedTemperatureUnit = newUnit;
+        if (weatherClient && weatherClient.info) {
+            weatherClient.info.update();
+        }
+        if (weatherClient) {
+            weatherClient.emit('changed');
+        }
+    }
 }
 
 // Path to Flatpak keyfile
@@ -32,34 +53,6 @@ function getWeatherSettingsKeyfilePath() {
         '.var', 'app', 'org.gnome.Weather', 'config', 'glib-2.0', 'settings', 'keyfile'
     ]);
 }
-
-// Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
-/*function getGnomeTemperatureUnit() {
-    const keyfilePath = getWeatherSettingsKeyfilePath();
-    if (GLib.file_test(keyfilePath, GLib.FileTest.EXISTS)) {
-        const content = GLib.file_get_contents(keyfilePath);
-        if (content[0]) {
-            const text = new TextDecoder('utf-8').decode(content[1]);
-            const match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
-            if (match && match[1]) {
-                return match[1].toLowerCase();
-            }
-        }
-    }
-
-     // Additional check: use Gio.Settings for org.gnome.GWeather4 if non-Flatpak version is installed.
-    if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
-        const gwSettings = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
-        const unit = gwSettings.get_string('temperature-unit');
-        if (unit === 'centigrade' || unit === 'celsius')
-            return 'celsius';
-        if (unit === 'fahrenheit')
-            return 'fahrenheit';
-    }
-
-    // Fallback: default to regional locale setting
-    return 'default';
-}*/
 
 // Returns the GNOME Weather temperature unit setting as a string ('celsius', 'centigrade', or 'fahrenheit')
 async function getGnomeTemperatureUnitAsync() {
@@ -88,6 +81,7 @@ async function getGnomeTemperatureUnitAsync() {
 
 let settings, textureHandler, handlers = [];
 let tempUnitMonitor = null;
+let gwSettingsMonitor = null, gwSettingsHandler = null;
 let cachedTemperatureUnit = 'default';
 let enableCalendar, showWeekday, showMonth, enableClocks, showSeconds;
 let enableWeather, showBackground, showTemperature;
@@ -143,21 +137,45 @@ function loadSettings() {
     }));
 }
 
-// Monitor the Flatpak GNOME Weather keyfile when present.
+// Monitor the temperature unit setting, whichever backend the installed
+// GNOME Weather uses: the Flatpak keyfile, or the org.gnome.GWeather4
+// GSettings/dconf key used by distro (e.g. Debian) packages. These give a
+// prompt response to changes; refreshTemperatureUnit() is also polled
+// every 30s (see createWeatherClient) as a guaranteed fallback in case a
+// watcher event is ever missed.
 function createTemperatureUnitMonitor() {
-    const notify = () => {
-        const newUnit = getGnomeTemperatureUnit();
-        if (newUnit !== cachedTemperatureUnit) {
-            cachedTemperatureUnit = newUnit;
-            if (weatherClient && weatherClient.info) {
-                weatherClient.info.update();
-            }
-            if (weatherClient) {
-                weatherClient.emit('changed');
-            }
-        }
-    };
+    // Reset any existing watchers before (re)creating them.
+    teardownFlatpakKeyfileWatch();
+    if (gwSettingsMonitor && gwSettingsHandler) {
+        gwSettingsMonitor.disconnect(gwSettingsHandler);
+        gwSettingsMonitor = null;
+        gwSettingsHandler = null;
+    }
 
+    // Flatpak GNOME Weather: watch the keyfile, if present.
+    const keyfilePath = getWeatherSettingsKeyfilePath();
+    const keyfile = Gio.File.new_for_path(keyfilePath);
+    if (keyfile.query_exists(null)) {
+        const monitor = keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null);
+        if (monitor) {
+            tempUnitMonitor = monitor;
+            tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', () => {
+                refreshTemperatureUnit();
+            });
+        }
+    }
+
+    // Distro-packaged GNOME Weather (e.g. Debian): watch the GSettings key
+    // directly, since there's no keyfile to monitor in this case.
+    if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
+        gwSettingsMonitor = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
+        gwSettingsHandler = gwSettingsMonitor.connect('changed::temperature-unit', () => {
+            refreshTemperatureUnit();
+        });
+    }
+}
+
+function teardownFlatpakKeyfileWatch() {
     if (tempUnitMonitor) {
         if (tempUnitMonitor.handlerId) {
             tempUnitMonitor.disconnect(tempUnitMonitor.handlerId);
@@ -165,51 +183,13 @@ function createTemperatureUnitMonitor() {
         tempUnitMonitor.cancel();
         tempUnitMonitor = null;
     }
-
-    const keyfilePath = getWeatherSettingsKeyfilePath();
-    const keyfile = Gio.File.new_for_path(keyfilePath);
-    if (!keyfile.query_exists(null)) {
-        return;
-    }
-
-    const monitor = keyfile.monitor_file(Gio.FileMonitorFlags.NONE, null);
-    if (!monitor) {
-        return;
-    }
-
-    tempUnitMonitor = monitor;
-    tempUnitMonitor.handlerId = tempUnitMonitor.connect('changed', notify);
 }
 
 let path, themeData, stylesheetFile;
 
-/*function loadTheme() {
-    let theme = settings.get_string('theme');
-    path = Me.path + '/themes/' + theme;
-    if(!theme || !Gio.File.new_for_path(path).query_exists(null)) {
-        let interfaceSettings = Me.getSettings('org.gnome.desktop.interface');
-        theme = interfaceSettings.get_string('icon-theme');
-        path = Me.path + '/themes/' + theme;
-        if(!theme || !Gio.File.new_for_path(path).query_exists(null)) {
-            path = Me.path + '/themes/Adwaita';
-        }
-    }
-    path += '/';
-    let jsonFile = Gio.File.new_for_path(path + 'theme-data.json');
-    let json = jsonFile.load_contents(null)[1];
-    themeData = JSON.parse(new TextDecoder('utf-8').decode(json));
-    let context = St.ThemeContext.get_for_stage(global.stage);
-    if(stylesheetFile) {
-        context.get_theme().unload_stylesheet(stylesheetFile);
-    }
-    stylesheetFile = Gio.File.new_for_path(path + 'stylesheet.css');
-    context.get_theme().load_stylesheet(stylesheetFile);
-    loadSurfaces();
-}*/
-
 async function loadTheme() {
     let theme = settings.get_string('theme');
-    let path = Me.path + '/themes/' + theme;
+    path = Me.path + '/themes/' + theme;
     if (!theme || !Gio.File.new_for_path(path).query_exists(null)) {
         let interfaceSettings = Me.getSettings('org.gnome.desktop.interface');
         theme = interfaceSettings.get_string('icon-theme');
@@ -448,23 +428,23 @@ function repaintCalendar(icon) {
     let baseline = layout.get_baseline() / Pango.SCALE;
     context.moveTo(textX, iconSize / 96 * dayMonthPos - baseline);
     PangoCairo.show_layout(context, layout);
-    
+
     context.setSourceRGB(dateR, dateG, dateB);
-    
+
     let dateLayout = PangoCairo.create_layout(context);
     let dateDesc = ' font_desc="' + dateFont + (dateBold ? ' bold' : '') + ' ' + (iconSize / 96 * dateSize) + 'px"';
     dateLayout.set_markup('<span' + dateDesc + '>' + date + '</span>', -1);
-    
+
     let horizOffset = themeData.dateHorizontalOffset !== undefined ? themeData.dateHorizontalOffset : 0;
-    
+
     let dateX = ((iconSize - dateLayout.get_pixel_size()[0]) / 2) + (iconSize / 96 * horizOffset);
-    
+
     datePos = showWeekday || showMonth ? datePos : dateOnlyPos;
     let dateBaseline = dateLayout.get_baseline() / Pango.SCALE;
-    
+
     context.moveTo(dateX, iconSize / 96 * datePos - dateBaseline);
     PangoCairo.show_layout(context, dateLayout);
-    
+
     context.$dispose();
 }
 
@@ -488,14 +468,14 @@ function repaintSymbolicCalendar(icon) {
         context.setOperator(Cairo.Operator.DEST_OUT);
     }
     context.setSourceRGB(symDateR, symDateG, symDateB);
-    
+
     let dateLayout = PangoCairo.create_layout(context);
     let dateDesc = ' font_desc="' + symDateFont + (symDateBold ? ' bold' : '') + ' ' + (iconSize / 16 * symDateSize) + 'px"';
     dateLayout.set_markup('<span' + dateDesc + '>' + date + '</span>', -1);
-    
+
     let dateX = (iconSize - dateLayout.get_pixel_size()[0]) / 2;
     let dateBaseline = dateLayout.get_baseline() / Pango.SCALE;
-    
+
     context.moveTo(dateX, iconSize / 16 * symDatePos - dateBaseline);
     PangoCairo.show_layout(context, dateLayout);
     context.$dispose();
@@ -576,7 +556,7 @@ function repaintWeather(icon) {
     let iconName = 'weather-none', temperature = ' --°';
     if(forecast != null) {
         iconName = forecast.get_icon_name();
-        let unit = getGnomeTemperatureUnit();
+        let unit = cachedTemperatureUnit;
         let tempValue;
         if (unit === 'fahrenheit') {
             [, tempValue] = forecast.get_value_temp(4);
@@ -687,7 +667,7 @@ function redisplayIcons() {
     if (!controls && Main.overview._overview) {
         controls = Main.overview._overview._controls; // Fallback for legacy GNOME versions
     }
-    
+
     if (!controls) return;
 
     let appDisplay = controls._appDisplay;
@@ -757,19 +737,17 @@ function destroyObjects() {
         settings.disconnect(handler);
     });
     handlers = [];
-    
-    if (tempUnitMonitor) {
-        if (tempUnitMonitor.handlerId) {
-            tempUnitMonitor.disconnect(tempUnitMonitor.handlerId);
-        }
-        tempUnitMonitor.cancel();
-        tempUnitMonitor = null;
+
+    teardownFlatpakKeyfileWatch();
+    if (gwSettingsMonitor && gwSettingsHandler) {
+        gwSettingsMonitor.disconnect(gwSettingsHandler);
+        gwSettingsMonitor = null;
+        gwSettingsHandler = null;
     }
 
     weatherClient = weatherTimeout = null;
     calendar = calendar48 = symbolicCalendar = clocks = symbolicClocks = null;
     hour = symbolicHour = minute = symbolicMinute = second = null;
-    tempUnitMonitor = null;
 }
 
 export default class DynamicIconsExtension extends Extension {
