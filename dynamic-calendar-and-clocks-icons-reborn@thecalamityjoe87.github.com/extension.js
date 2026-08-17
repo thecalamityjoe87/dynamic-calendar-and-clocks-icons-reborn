@@ -29,10 +29,8 @@ async function createWeatherClient() {
     }
 }
 
-// Re-reads the temperature unit and, if it changed, updates the cache and
-// triggers a repaint. Called both by the file/GSettings watchers (for a
-// prompt response) and on a 30s timer (as a guaranteed self-correcting
-// fallback, in case a watcher event is ever missed).
+// Re-checks the unit and repaints if it changed. Gets called from the
+// keyfile/GSettings watchers below, plus every 30s just in case we missed one.
 async function refreshTemperatureUnit() {
     const newUnit = await getGnomeTemperatureUnitAsync();
     if (newUnit !== cachedTemperatureUnit) {
@@ -137,22 +135,11 @@ function loadSettings() {
     }));
 }
 
-// Monitor the temperature unit setting, whichever backend the installed
-// GNOME Weather uses: the Flatpak keyfile, or the org.gnome.GWeather4
-// GSettings/dconf key used by distro (e.g. Debian) packages. These give a
-// prompt response to changes; refreshTemperatureUnit() is also polled
-// every 30s (see createWeatherClient) as a guaranteed fallback in case a
-// watcher event is ever missed.
+// Watch for temperature unit changes - Flatpak keyfile or GSettings,
+// whichever one applies. Just for a quick response; the 30s poll in
+// createWeatherClient() catches it either way if we miss an event here.
 function createTemperatureUnitMonitor() {
-    // Reset any existing watchers before (re)creating them.
-    teardownFlatpakKeyfileWatch();
-    if (gwSettingsMonitor && gwSettingsHandler) {
-        gwSettingsMonitor.disconnect(gwSettingsHandler);
-        gwSettingsMonitor = null;
-        gwSettingsHandler = null;
-    }
-
-    // Flatpak GNOME Weather: watch the keyfile, if present.
+    // Flatpak GNOME Weather: watch the keyfile if it exists.
     const keyfilePath = getWeatherSettingsKeyfilePath();
     const keyfile = Gio.File.new_for_path(keyfilePath);
     if (keyfile.query_exists(null)) {
@@ -165,7 +152,7 @@ function createTemperatureUnitMonitor() {
         }
     }
 
-    // Distro-packaged GNOME Weather (e.g. Debian): watch the GSettings key
+    // Distro-packaged GNOME Weather: watch the GSettings key
     // directly, since there's no keyfile to monitor in this case.
     if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
         gwSettingsMonitor = new Gio.Settings({ schema: 'org.gnome.GWeather4' });
@@ -175,6 +162,7 @@ function createTemperatureUnitMonitor() {
     }
 }
 
+// Helper function to destroy Flatpak keyfile watcher
 function teardownFlatpakKeyfileWatch() {
     if (tempUnitMonitor) {
         if (tempUnitMonitor.handlerId) {
