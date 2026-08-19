@@ -89,7 +89,7 @@ let tempUnitMonitor = null;
 let gwSettingsMonitor = null, gwSettingsHandler = null;
 let cachedTemperatureUnit = 'default';
 let enableCalendar, showWeekday, showMonth, enableClocks, showSeconds;
-let enableWeather, showBackground, showTemperature;
+let enableWeather, showBackground, showTemperature, enableDigitalClock;
 
 function loadSettings() {
     settings = Me.getSettings('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
@@ -98,6 +98,7 @@ function loadSettings() {
     showWeekday = settings.get_boolean('show-weekday');
     showMonth = settings.get_boolean('show-month');
     enableClocks = settings.get_boolean('clocks');
+    enableDigitalClock = settings.get_boolean('digital-clock');
     showSeconds = settings.get_boolean('show-seconds');
     enableWeather = settings.get_boolean('weather');
     showBackground = settings.get_boolean('show-background');
@@ -123,6 +124,10 @@ function loadSettings() {
     }));
     handlers.push(settings.connect('changed::clocks', () => {
         enableClocks = settings.get_boolean('clocks');
+        redisplayIcons();
+    }));
+    handlers.push(settings.connect('changed::digital-clock', () => {
+        enableDigitalClock = settings.get_boolean('digital-clock');
         redisplayIcons();
     }));
     handlers.push(settings.connect('changed::show-seconds', () => {
@@ -489,7 +494,13 @@ function repaintSymbolicCalendar(icon) {
 function repaintClocks(icon) {
     if(icon.get_stage() == null) return;
     if(icon.get_theme_node().get_icon_style() == 2) {
+        // Symbolic style still uses the analog face for now - digital
+        // mode only replaces the full-color icon.
         repaintSymbolicClocks(icon);
+        return;
+    }
+    if(enableDigitalClock) {
+        repaintDigitalClock(icon);
         return;
     }
     let now = new Date();
@@ -548,6 +559,156 @@ function repaintSymbolicClocks(icon) {
     context.translate(-64, -symClockCenter);
     context.setSourceSurface(symbolicMinute, 0, 0);
     context.paint();
+    context.$dispose();
+}
+
+// Standard rounded-rect path, built from four quarter arcs.
+function roundedRectPath(context, x, y, w, h, r) {
+    context.newSubPath();
+    context.arc(x + w - r, y + r, r, -Math.PI / 2, 0);
+    context.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+    context.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
+    context.arc(x + r, y + r, r, Math.PI, 3 * Math.PI / 2);
+    context.closePath();
+}
+
+// Draws one flip-card. Real gap between the two flaps, not just a painted
+// line - a thin line gets lost once this 512px design scales down to a
+// real ~32-96px icon. Digits get drawn once per flap, clipped to each
+// half, so the number itself splits at the seam too.
+function drawFlipCard(context, x, y, w, h, text) {
+    const gap = 6; // physical gap between flaps, in 512px design space
+
+    // Fill behind everything so the gap between flaps shows this color
+    // instead of nothing.
+    roundedRectPath(context, x, y, w, h, 10);
+    context.setSourceRGB(0.02, 0.02, 0.02);
+    context.fillPreserve();
+    context.setSourceRGBA(0.4, 0.4, 0.42, 0.9);
+    context.setLineWidth(2.5);
+    context.stroke();
+
+    let halfH = (h - gap) / 2;
+    let topRect = [x, y, w, halfH];
+    let bottomRect = [x, y + halfH + gap, w, halfH];
+
+    // Build the layout once and reuse it for both flaps so they line up.
+    let layout = PangoCairo.create_layout(context);
+    // Stops glyphs from snapping to the pixel grid - without this the
+    // digits drift at small icon sizes. Guarded since it's Pango 1.44+.
+    let pangoContext = layout.get_context();
+    if(typeof pangoContext.set_round_glyph_positions === 'function') {
+        pangoContext.set_round_glyph_positions(false);
+    }
+    let fontSize = 150;
+    let inkRect, logicalRect;
+    do {
+        layout.set_markup('<span font_desc="Sans Bold ' + fontSize + 'px">' + text + '</span>', -1);
+        [inkRect, logicalRect] = layout.get_pixel_extents();
+        fontSize -= 4;
+    } while(logicalRect.width > w - 16 && fontSize > 20);
+
+    // Use ink extents, not logical - logical height includes descender
+    // space digits don't use, which was pushing them off-center.
+    let textX = x + (w - inkRect.width) / 2 - inkRect.x;
+    let textY = (y + h / 2 - inkRect.height / 2) - inkRect.y;
+
+    // Top flap - clip to the card shape plus the top half, so only that
+    // half of the flap and digit shows.
+    context.save();
+    roundedRectPath(context, x, y, w, h, 10);
+    context.clip();
+    context.rectangle(...topRect);
+    context.clip();
+    context.setSourceRGB(0.17, 0.17, 0.19);
+    context.rectangle(...topRect);
+    context.fill();
+    context.setSourceRGB(0.83, 0.77, 0.63);
+    context.moveTo(textX, textY);
+    PangoCairo.show_layout(context, layout);
+    context.restore();
+
+    // Bottom flap, same deal but clipped to the bottom half.
+    context.save();
+    roundedRectPath(context, x, y, w, h, 10);
+    context.clip();
+    context.rectangle(...bottomRect);
+    context.clip();
+    context.setSourceRGB(0.17, 0.17, 0.19);
+    context.rectangle(...bottomRect);
+    context.fill();
+    context.setSourceRGB(0.83, 0.77, 0.63);
+    context.moveTo(textX, textY);
+    PangoCairo.show_layout(context, layout);
+    context.restore();
+
+    // Stroke the border again on top so it stays crisp
+    roundedRectPath(context, x, y, w, h, 10);
+    context.setSourceRGBA(0.4, 0.4, 0.42, 0.9);
+    context.setLineWidth(2);
+    context.stroke();
+}
+
+// Flip-clock face, drawn entirely with Cairo in the same 512x512 space
+// repaintClocks uses for the analog face. No theme assets needed - every
+// icon theme gets the same digital face for now.
+function repaintDigitalClock(icon) {
+    if(icon.get_stage() == null) return;
+    let now = new Date();
+    let context = icon.get_context();
+    let scaleFactor = getIconSize(icon, context) / 512;
+    context.scale(scaleFactor, scaleFactor);
+
+    // Metal bezel
+    roundedRectPath(context, 40, 40, 432, 432, 48);
+    context.setSourceRGB(0.27, 0.27, 0.29);
+    context.fillPreserve();
+    context.setSourceRGB(0.5, 0.5, 0.52);
+    context.setLineWidth(4);
+    context.stroke();
+
+    // Top sheen
+    context.save();
+    roundedRectPath(context, 40, 40, 432, 432, 48);
+    context.clip();
+    context.setSourceRGBA(1, 1, 1, 0.08);
+    context.rectangle(40, 40, 432, 40);
+    context.fill();
+    context.restore();
+
+    // Display window, drawn before the screws so it can't paint over them.
+    roundedRectPath(context, 72, 72, 368, 368, 16);
+    context.setSourceRGB(0.06, 0.06, 0.07);
+    context.fill();
+
+    // Corner screws, tucked inside the window's own corners, clear of the
+    // cards (y=166..346).
+    context.setSourceRGB(0.55, 0.55, 0.57);
+    for (const [cx, cy] of [[96, 96], [416, 96], [96, 416], [416, 416]]) {
+        context.arc(cx, cy, 8, 0, 2 * Math.PI);
+        context.fill();
+    }
+
+    // HH : MM flip cards
+    let hourStr = String(now.getHours()).padStart(2, '0');
+    let minuteStr = String(now.getMinutes()).padStart(2, '0');
+    let seconds = now.getSeconds();
+    let cardWidth = 150, cardHeight = 180, cardY = 166;
+    let card1X = 86, colonX = 236, card2X = 276;
+
+    drawFlipCard(context, card1X, cardY, cardWidth, cardHeight, hourStr);
+    drawFlipCard(context, card2X, cardY, cardWidth, cardHeight, minuteStr);
+
+    // Colon blinks with real seconds when Show Seconds is on, otherwise
+    // just stays solid.
+    let colonAlpha = showSeconds ? (seconds % 2 === 0 ? 1 : 0.15) : 1;
+    context.setSourceRGBA(0.83, 0.77, 0.63, colonAlpha);
+    let colonCenterX = colonX + 20;
+    for (const cy of [cardY + cardHeight * 0.32, cardY + cardHeight * 0.68]) {
+        context.arc(colonCenterX, cy, 11, 0, 2 * Math.PI);
+        context.fill();
+    }
+
     context.$dispose();
 }
 
