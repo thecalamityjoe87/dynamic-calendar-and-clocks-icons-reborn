@@ -85,6 +85,7 @@ async function getGnomeTemperatureUnitAsync() {
 }
 
 let settings, textureHandler, handlers = [];
+let desktopInterfaceSettings;
 let tempUnitMonitor = null;
 let gwSettingsMonitor = null, gwSettingsHandler = null;
 let cachedTemperatureUnit = 'default';
@@ -93,6 +94,7 @@ let enableWeather, showBackground, showTemperature, enableDigitalClock;
 
 function loadSettings() {
     settings = Me.getSettings('org.gnome.shell.extensions.dynamic-calendar-and-clocks-icons-reborn');
+    desktopInterfaceSettings = Me.getSettings('org.gnome.desktop.interface');
     loadTheme();
     enableCalendar = settings.get_boolean('calendar');
     showWeekday = settings.get_boolean('show-weekday');
@@ -689,8 +691,13 @@ function repaintDigitalClock(icon) {
         context.fill();
     }
 
-    // HH : MM flip cards
-    let hourStr = String(now.getHours()).padStart(2, '0');
+    // HH : MM flip cards - hour format follows GNOME's clock-format
+    // setting, same as the analog clock face would if it showed a digit.
+    let use12h = desktopInterfaceSettings.get_string('clock-format') === '12h';
+    let hours24 = now.getHours();
+    let meridiem = hours24 >= 12 ? 'PM' : 'AM';
+    let hourValue = use12h ? (hours24 % 12 || 12) : hours24;
+    let hourStr = String(hourValue).padStart(2, '0');
     let minuteStr = String(now.getMinutes()).padStart(2, '0');
     let seconds = now.getSeconds();
     let cardWidth = 150, cardHeight = 180, cardY = 166;
@@ -698,6 +705,17 @@ function repaintDigitalClock(icon) {
 
     drawFlipCard(context, card1X, cardY, cardWidth, cardHeight, hourStr);
     drawFlipCard(context, card2X, cardY, cardWidth, cardHeight, minuteStr);
+
+    if(use12h) {
+        context.setSourceRGB(0.83, 0.77, 0.63);
+        let meridiemLayout = PangoCairo.create_layout(context);
+        meridiemLayout.set_markup('<span font_desc="Sans Bold 44px">' + meridiem + '</span>', -1);
+        let [meridiemInk] = meridiemLayout.get_pixel_extents();
+        let meridiemX = 256 - meridiemInk.width / 2 - meridiemInk.x;
+        let meridiemY = 384 - meridiemInk.height / 2 - meridiemInk.y;
+        context.moveTo(meridiemX, meridiemY);
+        PangoCairo.show_layout(context, meridiemLayout);
+    }
 
     // Colon blinks with real seconds when Show Seconds is on, otherwise
     // just stays solid.
@@ -932,6 +950,7 @@ export default class DynamicIconsExtension extends Extension {
         redisplayIcons();
         destroyObjects();
         settings = null;
+        desktopInterfaceSettings = null;
         textureHandler = null;
         themeData = null;
         stylesheetFile = null;
