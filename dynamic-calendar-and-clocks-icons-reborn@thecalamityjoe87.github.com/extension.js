@@ -599,9 +599,7 @@ function drawFlipCard(context, x, y, w, h, text) {
     // Stops glyphs from snapping to the pixel grid - without this the
     // digits drift at small icon sizes. Guarded since it's Pango 1.44+.
     let pangoContext = layout.get_context();
-    if(typeof pangoContext.set_round_glyph_positions === 'function') {
-        pangoContext.set_round_glyph_positions(false);
-    }
+    pangoContext.set_round_glyph_positions(false);
     let fontSize = 150;
     let inkRect, logicalRect;
     do {
