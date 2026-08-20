@@ -846,9 +846,9 @@ function getIconSize(icon, context) {
 
 function redisplayIcons() {
     let controls = Main.overview._controls;
-    if (!controls && Main.overview._overview) {
+    /*if (!controls && Main.overview._overview) {
         controls = Main.overview._overview._controls; // Fallback for legacy GNOME versions
-    }
+    }*/
 
     if (!controls) return;
 
