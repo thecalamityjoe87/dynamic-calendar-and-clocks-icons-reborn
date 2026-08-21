@@ -659,6 +659,15 @@ function repaintDigitalClock(icon) {
     let scaleFactor = getIconSize(icon, context) / 512;
     context.scale(scaleFactor, scaleFactor);
 
+    // Bezel margin below is 40px, which fills less of the canvas than
+    // the analog/calendar theme icons do - reads smaller at the same
+    // icon size. Scale up around center to match instead of touching
+    // every constant below. Offset is the closed form for "scale
+    // around center": center * (1 - scale).
+    const bezelScale = 1.05;
+    context.translate(256 * (1 - bezelScale), 256 * (1 - bezelScale));
+    context.scale(bezelScale, bezelScale);
+
     // Metal bezel
     roundedRectPath(context, 40, 40, 432, 432, 48);
     context.setSourceRGB(0.27, 0.27, 0.29);
