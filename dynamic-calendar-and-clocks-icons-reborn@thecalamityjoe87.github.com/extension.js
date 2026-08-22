@@ -8,6 +8,9 @@ import St from 'gi://St';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Weather from 'resource:///org/gnome/shell/misc/weather.js';
+
+Gio._promisify(Gio.File.prototype, 'load_contents_async', 'load_contents_finish');
+
 let Me;
 
 const CALENDAR_FILE = 'org.gnome.Calendar.desktop';
@@ -39,7 +42,7 @@ async function createWeatherClient() {
 // Re-checks the unit and repaints if it changed. Gets called from the
 // keyfile/GSettings watchers below, plus every 30s just in case we missed one.
 async function refreshTemperatureUnit() {
-    const newUnit = await getGnomeTemperatureUnitAsync();
+    let newUnit = await getGnomeTemperatureUnitAsync();
     if (newUnit !== cachedTemperatureUnit) {
         cachedTemperatureUnit = newUnit;
         if (weatherClient && weatherClient.info) {
@@ -65,11 +68,21 @@ async function getGnomeTemperatureUnitAsync() {
     const file = Gio.File.new_for_path(keyfilePath);
 
     if (file.query_exists(null)) {
-        const [contents] = await file.load_contents_async(null);
-        const text = new TextDecoder('utf-8').decode(contents);
-        const match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
-        if (match && match[1])
-            return match[1].toLowerCase();
+        let contents;
+        try {
+            [contents] = await file.load_contents_async(cancellable);
+        } catch (e) {
+            // Cancelled just means disable() fired mid-read, not a real error.
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
+                console.error(`dynamic-calendar-and-clocks-icons-reborn: failed to read temperature unit: ${e}`);
+            }
+        }
+        if (contents) {
+            const text = new TextDecoder('utf-8').decode(contents);
+            const match = text.match(/temperature-unit\s*=\s*'?(celsius|centigrade|fahrenheit)'?/i);
+            if (match && match[1])
+                return match[1].toLowerCase();
+        }
     }
 
     if (Gio.Settings.list_schemas().includes('org.gnome.GWeather4')) {
@@ -86,6 +99,9 @@ async function getGnomeTemperatureUnitAsync() {
 
 let settings, textureHandler, handlers = [];
 let desktopInterfaceSettings;
+// Shared by every async file read - cancelled on disable() so a
+// pending read doesn't finish after we've torn everything down.
+let cancellable;
 let tempUnitMonitor = null;
 let gwSettingsMonitor = null, gwSettingsHandler = null;
 let cachedTemperatureUnit = 'default';
@@ -201,27 +217,38 @@ let path, themeData, stylesheetFile;
 
 async function loadTheme() {
     let theme = settings.get_string('theme');
-    path = Me.path + '/themes/' + theme;
-    if (!theme || !Gio.File.new_for_path(path).query_exists(null)) {
+    let themePath = Me.path + '/themes/' + theme;
+    if (!theme || !Gio.File.new_for_path(themePath).query_exists(null)) {
         let interfaceSettings = Me.getSettings('org.gnome.desktop.interface');
         theme = interfaceSettings.get_string('icon-theme');
-        path = Me.path + '/themes/' + theme;
-        if (!theme || !Gio.File.new_for_path(path).query_exists(null)) {
-            path = Me.path + '/themes/Adwaita';
+        themePath = Me.path + '/themes/' + theme;
+        if (!theme || !Gio.File.new_for_path(themePath).query_exists(null)) {
+            themePath = Me.path + '/themes/Adwaita';
         }
     }
-    path += '/';
+    themePath += '/';
 
-    let jsonFile = Gio.File.new_for_path(path + 'theme-data.json');
-    let [json] = await jsonFile.load_contents_async(null);
+    let jsonFile = Gio.File.new_for_path(themePath + 'theme-data.json');
+    let json;
+    try {
+        [json] = await jsonFile.load_contents_async(cancellable);
+    } catch (e) {
+        // Cancelled just means disable() fired mid-read, not a real error.
+        if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED)) {
+            console.error(`dynamic-calendar-and-clocks-icons-reborn: failed to load theme at ${themePath}: ${e}`);
+        }
+        return;
+    }
+
     themeData = JSON.parse(new TextDecoder('utf-8').decode(json));
 
     let context = St.ThemeContext.get_for_stage(global.stage);
     if (stylesheetFile) {
         context.get_theme().unload_stylesheet(stylesheetFile);
     }
-    stylesheetFile = Gio.File.new_for_path(path + 'stylesheet.css');
+    stylesheetFile = Gio.File.new_for_path(themePath + 'stylesheet.css');
     context.get_theme().load_stylesheet(stylesheetFile);
+    path = themePath;
     loadSurfaces();
 }
 
@@ -376,7 +403,7 @@ function calculateDateOffset(iconSize, date) {
 }
 
 function repaintCalendar(icon) {
-    if(icon.get_stage() == null) return;
+    if(icon.get_stage() == null || !themeData) return;
     if(icon.get_theme_node().get_icon_style() == 2) {
         repaintSymbolicCalendar(icon);
         return;
@@ -461,6 +488,7 @@ function repaintCalendar(icon) {
 }
 
 function repaintSymbolicCalendar(icon) {
+    if(!themeData) return;
     let now = new Date();
     let date = now.getDate().toString();
     let symDateR = themeData.symDateColor[0] / 255;
@@ -494,7 +522,7 @@ function repaintSymbolicCalendar(icon) {
 }
 
 function repaintClocks(icon) {
-    if(icon.get_stage() == null) return;
+    if(icon.get_stage() == null || !themeData) return;
     if(icon.get_theme_node().get_icon_style() == 2) {
         // Symbolic style still uses the analog face for now - digital
         // mode only replaces the full-color icon.
@@ -538,6 +566,7 @@ function repaintClocks(icon) {
 }
 
 function repaintSymbolicClocks(icon) {
+    if(!themeData) return;
     let now = new Date();
     let hours = now.getHours() % 12;
     let minutes = now.getMinutes();
@@ -738,7 +767,7 @@ function repaintDigitalClock(icon) {
 }
 
 function repaintWeather(icon) {
-    if(icon.get_stage() == null) return;
+    if(icon.get_stage() == null || !themeData) return;
     if(icon.get_theme_node().get_icon_style() == 2) {
         repaintSymbolicWeather(icon);
         return;
@@ -911,7 +940,9 @@ function redisplayIcons() {
 
 function destroyObjects() {
     let context = St.ThemeContext.get_for_stage(global.stage);
-    context.get_theme().unload_stylesheet(stylesheetFile);
+    if (stylesheetFile) {
+        context.get_theme().unload_stylesheet(stylesheetFile);
+    }
     calendarClocksIcons.forEach(calendarClocksIcon => {
         disposeIcon(calendarClocksIcon);
         calendarClocksIcon.destroy();
@@ -944,6 +975,7 @@ function destroyObjects() {
 export default class DynamicIconsExtension extends Extension {
     enable() {
         Me = this;
+        cancellable = new Gio.Cancellable();
         createWeatherClient();
         loadSettings();
         createTemperatureUnitMonitor();
@@ -956,6 +988,9 @@ export default class DynamicIconsExtension extends Extension {
         Shell.App.prototype.create_icon_texture = originalCreate;
         redisplayIcons();
         destroyObjects();
+        // Kills any file read still in flight before we null everything out.
+        cancellable.cancel();
+        cancellable = null;
         settings = null;
         desktopInterfaceSettings = null;
         textureHandler = null;
