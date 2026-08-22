@@ -75,6 +75,7 @@ export default class DynamicIconsPreferences extends ExtensionPreferences {
         });
         page.add(clocksGroup);
         newRow(settings, clocksGroup, _('Dynamic Clocks Icon'), 'clocks');
+        newRow(settings, clocksGroup, _('Digital Clock'), 'digital-clock');
         newRow(settings, clocksGroup, _('Show Seconds'), 'show-seconds');
         const weatherGroup = new Adw.PreferencesGroup({
             title: _('Weather'),
