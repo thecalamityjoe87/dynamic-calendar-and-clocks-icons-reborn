@@ -17,6 +17,9 @@
     <key name="clocks" type="b">
       <default>true</default>
     </key>
+    <key name="digital-clock" type="b">
+      <default>false</default>
+    </key>
     <key name="show-seconds" type="b">
       <default>true</default>
     </key>
