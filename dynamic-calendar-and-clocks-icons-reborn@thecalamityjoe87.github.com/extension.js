@@ -795,6 +795,12 @@ function repaintWeather(icon) {
     let tempBold = themeData.temperatureBold ? 'bold' : 'normal';
     let {temperatureFont, temperatureSize} = themeData;
     let iconSize = icon.requestedIconSize;
+    if(iconSize == -1) {
+        // -1 means "use the theme's size". St.Icon handles that on its own,
+        // but our Bin/BoxLayout/Label doesn't, so look it up here instead.
+        iconSize = icon.get_theme_node().get_icon_size();
+        icon.set_size(iconSize, iconSize);
+    }
     weatherPos = showTemperature ? weatherPos : weatherOnlyPos;
     icon.boxLayout.style =
     'padding-top: ' + iconSize / 96 * weatherPos + 'px;' +
@@ -819,8 +825,14 @@ function repaintSymbolicWeather(icon) {
     if(forecast != null) {
         iconName = forecast.get_symbolic_icon_name();
     }
+    let iconSize = icon.requestedIconSize;
+    if(iconSize == -1) {
+        iconSize = icon.get_theme_node().get_icon_size();
+        icon.set_size(iconSize, iconSize);
+    }
     icon.image.set_gicon(getWeatherImage(iconName));
-    icon.image.set_icon_size(icon.requestedIconSize);
+    //icon.image.set_icon_size(icon.requestedIconSize);
+    icon.image.set_icon_size(iconSize);
     icon.label.visible = false;
 }
 
