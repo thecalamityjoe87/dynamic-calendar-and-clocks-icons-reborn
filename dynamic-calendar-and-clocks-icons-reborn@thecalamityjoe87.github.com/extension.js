@@ -1,4 +1,5 @@
 import Cairo from 'gi://cairo';
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Pango from 'gi://Pango';
@@ -6,6 +7,7 @@ import PangoCairo from 'gi://PangoCairo';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as IconGrid from 'resource:///org/gnome/shell/ui/iconGrid.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as Weather from 'resource:///org/gnome/shell/misc/weather.js';
 
@@ -215,16 +217,37 @@ function teardownFlatpakKeyfileWatch() {
 
 let path, themeData, stylesheetFile;
 
+// Finds our theme for the system icon theme, so variants like Yaru-blue
+// or Papirus-Dark still get their base theme. Returns null if none match.
+function findBundledTheme(iconTheme) {
+    if (!iconTheme)
+        return null;
+    let themesDir = Gio.File.new_for_path(Me.path + '/themes');
+    if (themesDir.get_child(iconTheme).query_exists(null))
+        return iconTheme;
+
+    let best = null;
+    let enumerator = themesDir.enumerate_children('standard::name,standard::type',
+        Gio.FileQueryInfoFlags.NONE, null);
+    let info;
+    while ((info = enumerator.next_file(null))) {
+        if (info.get_file_type() !== Gio.FileType.DIRECTORY)
+            continue;
+        let name = info.get_name();
+        if (iconTheme.startsWith(name + '-') && (!best || name.length > best.length))
+            best = name;
+    }
+    enumerator.close(null);
+    return best;
+}
+
 async function loadTheme() {
     let theme = settings.get_string('theme');
     let themePath = Me.path + '/themes/' + theme;
     if (!theme || !Gio.File.new_for_path(themePath).query_exists(null)) {
         let interfaceSettings = Me.getSettings('org.gnome.desktop.interface');
-        theme = interfaceSettings.get_string('icon-theme');
-        themePath = Me.path + '/themes/' + theme;
-        if (!theme || !Gio.File.new_for_path(themePath).query_exists(null)) {
-            themePath = Me.path + '/themes/Adwaita';
-        }
+        theme = findBundledTheme(interfaceSettings.get_string('icon-theme'));
+        themePath = Me.path + '/themes/' + (theme || 'Adwaita');
     }
     themePath += '/';
 
@@ -281,6 +304,15 @@ function loadOptionalSurface(file) {
 }
 
 let originalCreate;
+let originalRelocateSurplusItems;
+
+// Shell can think the app grid fits 0 icons per page before it's sized,
+// then crashes moving icons to pages that don't exist. Skip until it's sized.
+function relocateSurplusItems(pageIndex) {
+    if (this.columnsPerPage * this.rowsPerPage < 1)
+        return;
+    originalRelocateSurplusItems.call(this, pageIndex);
+}
 
 function createIconTexture(iconSize) {
     if(enableCalendar && this.get_id() == CALENDAR_FILE) {
@@ -334,7 +366,13 @@ function newWeatherIcon(iconSize) {
     }
     icon.set_size(iconSize, iconSize);
     icon.set_name('dynamic-weather-icon');
-    icon.boxLayout = new St.BoxLayout({vertical: true, y_expand: true});
+    icon.boxLayout = new St.BoxLayout({y_expand: true});
+    // GNOME 51 removed 'vertical', but 46/47 don't have 'orientation' yet.
+    if ('orientation' in icon.boxLayout) {
+        icon.boxLayout.orientation = Clutter.Orientation.VERTICAL;
+    } else {
+        icon.boxLayout.vertical = true;
+    }
     icon.set_child(icon.boxLayout);
     icon.image = new St.Icon({x_align: 2});
     icon.boxLayout.add_child(icon.image);
@@ -429,7 +467,7 @@ function repaintCalendar(icon) {
     let dateBold = themeData.dateBold ? 1 : 0;
     let {dateFont, dateSize, datePos, dateOnlyPos} = themeData;
     let context = icon.get_context();
-    let iconSize = getIconSize(icon, context);
+    let iconSize = getIconSize(icon, context, getThemeIconScale());
     let calendarBackground = calendar;
     let calendarBackgroundSize = 512;
     let requestedSize = icon.requestedIconSize;
@@ -539,7 +577,7 @@ function repaintClocks(icon) {
     let seconds = now.getSeconds();
     let clockCenter = themeData.clockCenter / 96 * 512;
     let context = icon.get_context();
-    let scaleFactor = getIconSize(icon, context) / 512;
+    let scaleFactor = getIconSize(icon, context, getThemeIconScale()) / 512;
     context.scale(scaleFactor, scaleFactor);
     context.setSourceSurface(clocks, 0, 0);
     context.paint();
@@ -685,7 +723,7 @@ function repaintDigitalClock(icon) {
     if(icon.get_stage() == null) return;
     let now = new Date();
     let context = icon.get_context();
-    let scaleFactor = getIconSize(icon, context) / 512;
+    let scaleFactor = getIconSize(icon, context, getThemeIconScale()) / 512;
     context.scale(scaleFactor, scaleFactor);
 
     // Bezel margin below is 40px, which fills less of the canvas than
@@ -798,10 +836,15 @@ function repaintWeather(icon) {
     if(iconSize == -1) {
         // -1 means "use the theme's size". St.Icon handles that on its own,
         // but our Bin/BoxLayout/Label doesn't, so look it up here instead.
-        iconSize = icon.get_theme_node().get_icon_size();
-        icon.set_size(iconSize, iconSize);
+        iconSize = getThemeIconSize(icon);
+        let scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        icon.set_size(iconSize * scale, iconSize * scale);
     }
     weatherPos = showTemperature ? weatherPos : weatherOnlyPos;
+    // Scale the whole box so the background, icon and label stay lined up.
+    let themeScale = getThemeIconScale();
+    icon.boxLayout.set_pivot_point(0.5, 0.5);
+    icon.boxLayout.set_scale(themeScale, themeScale);
     icon.boxLayout.style =
     'padding-top: ' + iconSize / 96 * weatherPos + 'px;' +
     'background-image: url(' + path + 'weather.svg);' +
@@ -819,6 +862,16 @@ function repaintWeather(icon) {
     icon.label.visible = showTemperature;
 }
 
+// Gets the theme's icon size the same way St.Icon does, defaulting to 48.
+function getThemeIconSize(icon) {
+    let node = icon.get_theme_node();
+    let scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+    let size = Math.round(node.get_length('icon-size') / scale);
+    if (size <= 0 && typeof node.get_icon_size === 'function')
+        size = node.get_icon_size();
+    return size > 0 ? size : 48;
+}
+
 function repaintSymbolicWeather(icon) {
     let forecast = getForecast();
     let iconName = 'weather-none-symbolic';
@@ -827,9 +880,11 @@ function repaintSymbolicWeather(icon) {
     }
     let iconSize = icon.requestedIconSize;
     if(iconSize == -1) {
-        iconSize = icon.get_theme_node().get_icon_size();
-        icon.set_size(iconSize, iconSize);
+        iconSize = getThemeIconSize(icon);
+        let scale = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        icon.set_size(iconSize * scale, iconSize * scale);
     }
+    icon.boxLayout.set_scale(1, 1);
     icon.image.set_gicon(getWeatherImage(iconName));
     //icon.image.set_icon_size(icon.requestedIconSize);
     icon.image.set_icon_size(iconSize);
@@ -883,13 +938,21 @@ function getWeatherImage(iconName) {
     return Gio.FileIcon.new(imageFile);
 }
 
-function getIconSize(icon, context) {
+// Lets a theme shrink its color icons with "iconScale" in theme-data.json,
+// for artwork that looks bigger than the rest of the dock (like Yaru).
+function getThemeIconScale() {
+    let scale = themeData && themeData.iconScale;
+    return scale > 0 && scale <= 1 ? scale : 1;
+}
+
+function getIconSize(icon, context, scale = 1) {
     let width = icon.get_width();
     let height = icon.get_height();
     let size = icon.scaledIconSize;
     if(size == -1) {
         size = Math.min(width, height);
     }
+    size *= scale;
     context.translate((width - size) / 2, (height - size) / 2);
     return size;
 }
@@ -993,11 +1056,17 @@ export default class DynamicIconsExtension extends Extension {
         createTemperatureUnitMonitor();
         originalCreate = Shell.App.prototype.create_icon_texture;
         Shell.App.prototype.create_icon_texture = createIconTexture;
+        const gridLayout = IconGrid.IconGridLayout.prototype;
+        originalRelocateSurplusItems = gridLayout._relocateSurplusItems;
+        gridLayout._relocateSurplusItems = relocateSurplusItems;
         redisplayIcons();
     }
 
     disable() {
         Shell.App.prototype.create_icon_texture = originalCreate;
+        IconGrid.IconGridLayout.prototype._relocateSurplusItems =
+            originalRelocateSurplusItems;
+        originalRelocateSurplusItems = null;
         redisplayIcons();
         destroyObjects();
         // Kills any file read still in flight before we null everything out.

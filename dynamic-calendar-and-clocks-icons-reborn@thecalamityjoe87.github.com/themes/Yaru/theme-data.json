@@ -26,5 +26,6 @@
     "temperatureColor": [102, 102, 102],
     "temperatureFont": "Ubuntu",
     "temperatureBold": true,
-    "temperatureSize": 15
+    "temperatureSize": 15,
+    "iconScale": 0.92
 }
